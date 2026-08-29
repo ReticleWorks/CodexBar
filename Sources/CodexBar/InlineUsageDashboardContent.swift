@@ -330,8 +330,14 @@ extension UsageMenuCardView.Model {
 
     static func shortDayLabel(_ day: String) -> String {
         let pieces = day.split(separator: "-")
-        guard pieces.count == 3, let rawDay = Int(pieces[2]) else { return day }
-        return "\(rawDay)"
+        guard pieces.count == 3,
+              let rawMonth = Int(pieces[1]),
+              let rawDay = Int(pieces[2]),
+              (1...12).contains(rawMonth)
+        else { return day }
+        let monthSymbols = DateFormatter().shortMonthSymbols ?? []
+        guard monthSymbols.indices.contains(rawMonth - 1) else { return day }
+        return "\(monthSymbols[rawMonth - 1]) \(rawDay)"
     }
 
     private static func shortModelName(_ name: String) -> String {
@@ -372,7 +378,7 @@ struct InlineUsageDashboardContent: View {
             self.kpis
             if !self.model.points.isEmpty {
                 MiniUsageBars(model: self.model)
-                    .frame(height: 58)
+                    .frame(height: 76)
                     .accessibilityLabel(self.model.accessibilityLabel)
             }
             self.detailLines
@@ -432,6 +438,7 @@ struct InlineUsageDashboardContent: View {
     private struct MiniUsageBars: View {
         let model: InlineUsageDashboardModel
         @Environment(\.menuItemHighlighted) private var isHighlighted
+        @State private var hoveredPointID: String?
 
         var body: some View {
             let scale = UsageChartScale(values: self.model.points.map(\.value))
@@ -452,6 +459,12 @@ struct InlineUsageDashboardContent: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: self.height(for: point, scale: scale, available: geometry.size.height))
                                 .accessibilityLabel(point.accessibilityValue)
+                                .contentShape(Rectangle())
+                                .onHover { hovering in
+                                    self.hoveredPointID = hovering ? point.id :
+                                        (self.hoveredPointID == point.id ? nil : self.hoveredPointID)
+                                }
+                                .help(self.hoverText(for: point))
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -460,8 +473,47 @@ struct InlineUsageDashboardContent: View {
                             .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.22))
                             .frame(height: 1)
                     }
+                    .overlay(alignment: .top) {
+                        if let point = self.hoveredPoint {
+                            Text(self.hoverText(for: point))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+                }
+                self.axisLabels
+            }
+        }
+
+        private var hoveredPoint: InlineUsageDashboardModel.Point? {
+            self.model.points.first { $0.id == self.hoveredPointID }
+        }
+
+        private var axisLabels: some View {
+            HStack(spacing: 4) {
+                if let first = self.model.points.first {
+                    Text(first.label)
+                    Spacer(minLength: 4)
+                }
+                if self.model.points.count > 2 {
+                    Text(self.model.points[self.model.points.count / 2].label)
+                    Spacer(minLength: 4)
+                }
+                if self.model.points.count > 1, let last = self.model.points.last {
+                    Text(last.label)
                 }
             }
+            .font(.system(size: 8))
+            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+
+        private func hoverText(for point: InlineUsageDashboardModel.Point) -> String {
+            "\(point.label): \(point.accessibilityValue)"
         }
 
         private func height(

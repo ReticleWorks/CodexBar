@@ -126,7 +126,7 @@ extension StatusItemController {
                 ?? codexProjection?.userFacingErrors.usage
                 ?? (surface == .liveCard ? self.store.userFacingError(for: target) : nil),
             limitsAvailability: self.store.knownLimitsAvailability(for: target),
-            usageBarsShowUsed: self.settings.usageBarsShowUsed,
+            usageBarsShowUsed: self.usageBarsShowUsed(for: target),
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
             tokenCostIsRefreshing: self.store.tokenCostRefreshIsActive(for: target),
@@ -165,6 +165,12 @@ extension StatusItemController {
             preferredCurrencyCode: self.settings.preferredCurrencyCode,
             now: now)
         return UsageMenuCardView.Model.make(input)
+    }
+
+    func usageBarsShowUsed(for provider: UsageProvider) -> Bool {
+        ProviderUsageDisplayPolicy.showsUsed(
+            for: provider,
+            defaultShowUsed: self.settings.usageBarsShowUsed)
     }
 
     private func menuCardSnapshot(
@@ -273,7 +279,8 @@ extension StatusItemController {
     }
 
     func accountInfo(for account: CodexVisibleAccount) -> AccountInfo {
-        AccountInfo(email: account.email, plan: account.workspaceLabel)
+        let alias = self.settings.codexDisplayAliases[account.email.lowercased()]
+        return AccountInfo(email: alias ?? account.email, plan: alias == nil ? account.workspaceLabel : nil)
     }
 
     private func quotaWarningMarkerThresholds(provider: UsageProvider, window: QuotaWarningWindow) -> [Int] {

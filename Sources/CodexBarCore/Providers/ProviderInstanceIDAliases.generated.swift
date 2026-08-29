@@ -16,6 +16,10 @@ extension ProviderInstanceID {
     public static let qwencloud = UsageProvider.qwencloud.instanceID
     public static let factory = UsageProvider.factory.instanceID
     public static let fireworks = UsageProvider.fireworks.instanceID
+    public static let tavily = UsageProvider.tavily.instanceID
+    public static let exa = UsageProvider.exa.instanceID
+    public static let tinker = UsageProvider.tinker.instanceID
+    public static let googleai = UsageProvider.googleai.instanceID
     public static let gemini = UsageProvider.gemini.instanceID
     public static let antigravity = UsageProvider.antigravity.instanceID
     public static let copilot = UsageProvider.copilot.instanceID

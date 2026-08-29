@@ -525,7 +525,21 @@ extension UsageMenuCardView.Model {
         }
     }
 
-    static func progressColor(for provider: UsageProvider) -> Color {
+    static func progressColor(for provider: UsageProvider, snapshot: UsageSnapshot? = nil) -> Color {
+        if provider == .claude {
+            let standardWindows = [snapshot?.primary, snapshot?.secondary, snapshot?.tertiary]
+                .compactMap(\.self)
+            let extraWindows = snapshot?.extraRateWindows?.map(\.window) ?? []
+            let usedPercent = (standardWindows + extraWindows)
+                .map(\.usedPercent)
+                .max()
+            if let usedPercent, usedPercent >= 95 {
+                return Color(nsColor: .systemRed)
+            }
+            if let usedPercent, usedPercent >= 80 {
+                return Color(nsColor: .systemYellow)
+            }
+        }
         let branding = ProviderDescriptorRegistry.descriptor(for: provider).branding
         if branding.progressColorStyle == .label {
             return Color(nsColor: .labelColor)

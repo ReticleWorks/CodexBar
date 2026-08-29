@@ -6,6 +6,37 @@ import Testing
 @MainActor
 extension CodexAccountScopedRefreshTests {
     @Test
+    func `segmented codex selector hydrates every visible account`() throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-segmented-hydrates-visible-accounts")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        settings.codexUsageDataSource = .oauth
+        settings.codexActiveSource = .liveSystem
+        settings._test_liveSystemCodexAccount = self.liveAccount(email: "live-segmented@example.com")
+
+        let managedID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-181818181818"))
+        let managedAccount = ManagedCodexAccount(
+            id: managedID,
+            email: "managed-segmented@example.com",
+            managedHomePath: "/tmp/codex-managed-segmented",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+
+        let store = self.makeUsageStore(settings: settings)
+
+        #expect(store.shouldFetchAllCodexVisibleAccounts())
+    }
+
+    @Test
     func `stale stacked projection collapse runs single codex fetch`() async throws {
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         let settings = self.makeSettingsStore(

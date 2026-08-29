@@ -1,6 +1,31 @@
 import CodexBarCore
 import SwiftUI
 
+enum ProviderDetailChartLabelFormatter {
+    private static let source: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private static let display: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale.current
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter
+    }()
+
+    static func axisLabel(_ label: String) -> String {
+        guard let date = self.source.date(from: label) else { return label }
+        return self.display.string(from: date)
+    }
+}
+
 struct ProviderDetailSectionsContent: View {
     let sections: [ProviderDetailSection]
     let chartColor: Color
@@ -56,6 +81,7 @@ struct ProviderDetailSectionsContent: View {
 private struct ProviderDetailChartContent: View {
     let chart: ProviderDetailSection.Chart
     let color: Color
+    @State private var hoveredIndex: Int?
     @Environment(\.menuItemHighlighted) private var isHighlighted
 
     var body: some View {
@@ -85,20 +111,28 @@ private struct ProviderDetailChartContent: View {
                 }
             }
             .frame(height: 58)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(self.accessibilityLabel)
+            self.axisLabels
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(self.accessibilityLabel)
     }
 
     private var bars: some View {
         GeometryReader { geometry in
             let scale = UsageChartScale(values: self.chart.points.map(\.value))
             HStack(alignment: .bottom, spacing: 2) {
-                ForEach(Array(self.chart.points.enumerated()), id: \.offset) { _, point in
+                ForEach(Array(self.chart.points.enumerated()), id: \.offset) { index, point in
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(self.fillColor(value: point.value, scale: scale))
                         .frame(maxWidth: .infinity)
                         .frame(height: Self.height(value: point.value, scale: scale, available: geometry.size.height))
+                        .contentShape(Rectangle())
+                        .onHover { hovering in
+                            self
+                                .hoveredIndex = hovering ? index :
+                                (self.hoveredIndex == index ? nil : self.hoveredIndex)
+                        }
+                        .help(self.hoverText(for: point))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -106,6 +140,16 @@ private struct ProviderDetailChartContent: View {
                 Rectangle()
                     .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.22))
                     .frame(height: 1)
+            }
+            .overlay(alignment: .top) {
+                if let point = self.hoveredPoint {
+                    Text(self.hoverText(for: point))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                }
             }
         }
     }
@@ -150,6 +194,38 @@ private struct ProviderDetailChartContent: View {
         let unit = self.chart.unit.map { " \($0)" } ?? ""
         let points = self.chart.points.map { "\($0.label) \($0.value)\(unit)" }.joined(separator: ", ")
         return title + points
+    }
+
+    private var hoveredPoint: ProviderDetailSection.Chart.Point? {
+        guard let hoveredIndex, self.chart.points.indices.contains(hoveredIndex) else { return nil }
+        return self.chart.points[hoveredIndex]
+    }
+
+    private var axisLabels: some View {
+        HStack(spacing: 4) {
+            if let first = self.chart.points.first {
+                Text(ProviderDetailChartLabelFormatter.axisLabel(first.label))
+                Spacer(minLength: 4)
+            }
+            if self.chart.points.count > 2 {
+                Text(ProviderDetailChartLabelFormatter.axisLabel(
+                    self.chart.points[self.chart.points.count / 2].label))
+                Spacer(minLength: 4)
+            }
+            if self.chart.points.count > 1, let last = self.chart.points.last {
+                Text(ProviderDetailChartLabelFormatter.axisLabel(last.label))
+            }
+        }
+        .font(.system(size: 8))
+        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+    }
+
+    private func hoverText(for point: ProviderDetailSection.Chart.Point) -> String {
+        let unit = self.chart.unit.map { " \($0)" } ?? ""
+        let value = point.value.formatted(.number.precision(.fractionLength(0...2)))
+        return "\(point.label): \(value)\(unit)"
     }
 
     private func fillColor(value: Double, scale: UsageChartScale) -> Color {

@@ -92,6 +92,11 @@ protocol ProviderImplementation: Sendable {
     func loginMenuAction(context: ProviderMenuLoginContext) -> (
         label: String, action: MenuDescriptor.MenuAction)?
 
+    /// Whether the generic login/switch row should exist. Account selectors that own both
+    /// authentication and selection can suppress the redundant row without inventing a fake action.
+    @MainActor
+    func showsLoginMenuAction(context: ProviderMenuLoginContext) -> Bool
+
     /// Optional provider-specific login flow. Returns whether to refresh after completion.
     @MainActor
     func runLoginFlow(context: ProviderLoginContext) async -> Bool
@@ -207,6 +212,11 @@ extension ProviderImplementation {
         -> (label: String, action: MenuDescriptor.MenuAction)?
     {
         nil
+    }
+
+    @MainActor
+    func showsLoginMenuAction(context _: ProviderMenuLoginContext) -> Bool {
+        true
     }
 
     @MainActor

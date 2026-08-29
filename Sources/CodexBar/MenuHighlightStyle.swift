@@ -1,12 +1,31 @@
 import SwiftUI
 
+// Command Line Tools does not ship SwiftUIMacros, so keep the pre-macro EnvironmentKey form.
+// swiftformat:disable environmentEntry
+private struct MenuItemHighlightedEnvironmentKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct MenuCardRefreshMonitorEnvironmentKey: EnvironmentKey {
+    static let defaultValue: MenuCardRefreshMonitor? = nil
+}
+
 extension EnvironmentValues {
-    @Entry var menuItemHighlighted: Bool = false
+    var menuItemHighlighted: Bool {
+        get { self[MenuItemHighlightedEnvironmentKey.self] }
+        set { self[MenuItemHighlightedEnvironmentKey.self] = newValue }
+    }
+
     /// Optional live-refresh monitor injected into menu card views so the provider card
     /// subtitle can reflect the in-flight "Refreshing…" state in place while the NSMenu
     /// stays open, without rebuilding the menu during AppKit tracking.
-    @Entry var menuCardRefreshMonitor: MenuCardRefreshMonitor?
+    var menuCardRefreshMonitor: MenuCardRefreshMonitor? {
+        get { self[MenuCardRefreshMonitorEnvironmentKey.self] }
+        set { self[MenuCardRefreshMonitorEnvironmentKey.self] = newValue }
+    }
 }
+
+// swiftformat:enable environmentEntry
 
 enum MenuHighlightStyle {
     static let selectionText = Color(nsColor: .selectedMenuItemTextColor)

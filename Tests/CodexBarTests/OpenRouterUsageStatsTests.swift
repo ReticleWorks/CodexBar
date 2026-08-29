@@ -20,6 +20,9 @@ struct OpenRouterPluginGoldenTests {
         for fixture in fixtures {
             let snapshot = try await OpenRouterLimitTestSupport.snapshot(engine: engine, keyBody: fixture.body)
             #expect(snapshot.identity?.loginMethod == "Balance: $1.90")
+            #expect(snapshot.providerCost?.used == 3.1)
+            #expect(snapshot.providerCost?.limit == 5)
+            #expect(snapshot.providerCost?.balance == 1.9)
             #expect(snapshot.detailRow(label: "Remaining")?.value == "$1.90")
             #expect(snapshot.primary?.usedPercent == fixture.used)
             #expect(snapshot.detailRow(label: "API key limit")?.value == fixture.limit)
@@ -107,6 +110,14 @@ struct OpenRouterPluginGoldenTests {
         #expect(snapshot.detailRow(label: "API key limit")?.value == "$20.00")
         #expect(snapshot.detailRow(label: "API key limit")?.secondaryValue == "Spending cap, not balance")
         #expect(snapshot.detailRow(label: "API key remaining")?.value == "$15.00")
+    }
+
+    @Test
+    func `negative rate limit is presented as unlimited`() async throws {
+        let snapshot = try await Self
+            .fetch(keyBody: #"{"data":{"limit":20,"usage":0,"rate_limit":{"requests":-1,"interval":"10s"}}}"#)
+
+        #expect(snapshot.detailRow(label: "Rate limit")?.value == "Unlimited")
     }
 
     @Test
@@ -564,6 +575,29 @@ struct OpenRouterPluginGoldenTests {
         #expect(cost.last30DaysCostUSD == 0.75)
         #expect(cost.meteredCostUSD == nil)
         #expect(cost.costProvenance == .listPriceEstimate)
+    }
+
+    @Test
+    func `activity accepts reasoning tokens larger than completion tokens`() async throws {
+        let activityBody = #"""
+        {"data":[{
+          "date":"2026-08-17",
+          "model_permaslug":"openai/gpt-5.6",
+          "endpoint_id":"endpoint-a",
+          "prompt_tokens":10,
+          "completion_tokens":5,
+          "reasoning_tokens":12,
+          "requests":1,
+          "usage":0.75,
+          "byok_usage_inference":0
+        }]}
+        """#
+        let usage = try await Self.fetch(activityBody: activityBody)
+        let cost = try #require(usage.costUsage)
+
+        #expect(cost.last30DaysCostUSD == 0.75)
+        #expect(cost.daily.first?.reasoningTokens == 12)
+        #expect(cost.daily.first?.outputTokens == 5)
     }
 
     @Test

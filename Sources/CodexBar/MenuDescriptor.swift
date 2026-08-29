@@ -567,11 +567,11 @@ struct MenuDescriptor {
         // Show "Add Account" if no account, "Switch Account" if logged in
         if let targetProvider,
            let implementation = ProviderCatalog.implementation(for: targetProvider),
-           implementation.supportsLoginFlow
+           implementation.supportsLoginFlow,
+           let loginContext,
+           implementation.showsLoginMenuAction(context: loginContext)
         {
-            if let loginContext,
-               let override = implementation.loginMenuAction(context: loginContext)
-            {
+            if let override = implementation.loginMenuAction(context: loginContext) {
                 entries.append(.action(override.label, override.action))
             } else {
                 let loginAction = self.switchAccountTarget(for: provider, store: store)

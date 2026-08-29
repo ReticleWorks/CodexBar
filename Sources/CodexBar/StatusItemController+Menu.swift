@@ -1063,6 +1063,7 @@ extension StatusItemController {
     {
         let view = CodexAccountSwitcherView(
             accounts: display.accounts,
+            displayAliases: self.settings.codexDisplayAliases,
             selectedAccountID: display.activeVisibleAccountID,
             width: width,
             onSelect: { [weak self, weak menu] account in

@@ -558,6 +558,36 @@ struct StatusMenuCodexSwitcherTests {
     }
 
     @Test
+    func `codex switcher keeps all three configured shorthand labels visible`() {
+        let emails = ["infra@reticle-works.com", "rherr@american.edu", "ai.herr.trey@gmail.com"]
+        let aliases = [
+            "infra@reticle-works.com": "infra@reticle",
+            "rherr@american.edu": "rherr@american",
+            "ai.herr.trey@gmail.com": "ai.herr.trey",
+        ]
+        let accounts = emails.enumerated().map { index, email in
+            CodexVisibleAccount(
+                id: "account-\(index)",
+                email: email,
+                storedAccountID: nil,
+                selectionSource: .liveSystem,
+                isActive: index == 0,
+                isLive: true,
+                canReauthenticate: true,
+                canRemove: false)
+        }
+
+        let view = CodexAccountSwitcherView(
+            accounts: accounts,
+            displayAliases: aliases,
+            selectedAccountID: accounts.first?.id,
+            width: 310,
+            onSelect: { _ in })
+
+        #expect(view._test_buttonTitles() == ["infra@reticle", "rherr@american", "ai.herr.trey"])
+    }
+
+    @Test
     func `codex switcher middle truncates long account emails`() {
         let accounts = [
             CodexVisibleAccount(

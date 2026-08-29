@@ -42,6 +42,31 @@ struct MenuCardProviderRegressionTests {
     }
 
     @Test
+    func `claude progress color warns at eighty and becomes critical at ninety five`() {
+        let now = Date()
+        func snapshot(_ usedPercent: Double) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: usedPercent,
+                    windowMinutes: 300,
+                    resetsAt: now.addingTimeInterval(300),
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now)
+        }
+
+        let claudeAccent = ProviderColor(hex: 0xD97757)
+        #expect(UsageMenuCardView.Model.progressColor(for: .claude, snapshot: snapshot(79.9)) == Color(
+            red: claudeAccent.red,
+            green: claudeAccent.green,
+            blue: claudeAccent.blue))
+        #expect(UsageMenuCardView.Model.progressColor(for: .claude, snapshot: snapshot(80)) ==
+            Color(nsColor: .systemYellow))
+        #expect(UsageMenuCardView.Model.progressColor(for: .claude, snapshot: snapshot(95)) ==
+            Color(nsColor: .systemRed))
+    }
+
+    @Test
     func `open router model shows daily and weekly key spend`() throws {
         let now = Date()
         let metadata = try #require(ProviderDefaults.metadata[.openrouter])

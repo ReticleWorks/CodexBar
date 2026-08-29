@@ -183,7 +183,7 @@ struct UsageMenuCardView: View {
         let creditsHintText: String?
         let creditsHintCopyText: String?
         var codexResetCredits: CodexResetCreditsPresentation?
-        let providerCost: ProviderCostSection?
+        var providerCost: ProviderCostSection?
         let tokenUsage: TokenUsageSection?
         let placeholder: String?
         let progressColor: Color
@@ -1028,7 +1028,7 @@ extension UsageMenuCardView.Model {
             providerCost: providerCost,
             tokenUsage: tokenUsage,
             placeholder: placeholder,
-            progressColor: Self.progressColor(for: input.provider))
+            progressColor: Self.progressColor(for: input.provider, snapshot: input.snapshot))
     }
 
     private static func visibleProviderDetails(input: Input) -> [ProviderDetailSection] {
@@ -1218,7 +1218,9 @@ extension UsageMenuCardView.Model {
             return (UsageFormatter.updatedString(from: updated, now: now), .info)
         }
 
-        return (L("Not fetched yet"), .info)
+        // Reaching an idle state without either a snapshot or a concrete fetch error is still
+        // a failed usage read. Do not present it as a harmless future event.
+        return (L("Unavailable"), .error)
     }
 
     private struct RedactedText {

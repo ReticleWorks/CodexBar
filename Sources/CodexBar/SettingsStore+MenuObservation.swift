@@ -97,6 +97,7 @@ extension SettingsStore {
         _ = self.zoomMateCookieSource
         _ = self.ollamaCookieSource
         _ = self.mergeIcons
+        _ = self.floatingSidebarEnabled
         _ = self.switcherShowsIcons
         _ = self.mergedOverviewSelectedProviders
         _ = self.zaiAPIToken

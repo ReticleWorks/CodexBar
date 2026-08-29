@@ -593,9 +593,9 @@ extension SettingsStore {
         let claudeModelScopedWeeklyUsageVisible = userDefaults.object(
             forKey: "claudeModelScopedWeeklyUsageVisible") as? Bool ?? false
         let codexSparkUsageVisibleDefault = userDefaults.object(forKey: "codexSparkUsageVisible") as? Bool
-        let codexSparkUsageVisible = codexSparkUsageVisibleDefault ?? true
+        let codexSparkUsageVisible = codexSparkUsageVisibleDefault ?? false
         if Self.isRunningTests, codexSparkUsageVisibleDefault == nil {
-            userDefaults.set(true, forKey: "codexSparkUsageVisible")
+            userDefaults.set(false, forKey: "codexSparkUsageVisible")
         }
         let codexExternalOAuthSourcesAllowed = userDefaults.object(
             forKey: "codexExternalOAuthSourcesAllowed") as? Bool ?? false
@@ -620,6 +620,8 @@ extension SettingsStore {
         }
         let jetbrainsIDEBasePath = userDefaults.string(forKey: "jetbrainsIDEBasePath") ?? ""
         let mergeIcons = userDefaults.object(forKey: "mergeIcons") as? Bool ?? true
+        // The sidebar is enabled but auto-hidden on first launch. Touching the right edge reveals it.
+        let floatingSidebarEnabled = userDefaults.object(forKey: "floatingSidebarEnabled") as? Bool ?? true
         let switcherShowsIcons = userDefaults.object(forKey: "switcherShowsIcons") as? Bool ?? true
         let mergedMenuLastSelectedWasOverview = userDefaults.object(
             forKey: "mergedMenuLastSelectedWasOverview") as? Bool ?? false
@@ -718,6 +720,7 @@ extension SettingsStore {
             providerStorageFootprintsEnabled: providerStorageFootprintsEnabled,
             jetbrainsIDEBasePath: jetbrainsIDEBasePath,
             mergeIcons: mergeIcons,
+            floatingSidebarEnabled: floatingSidebarEnabled,
             switcherShowsIcons: switcherShowsIcons,
             mergedMenuLastSelectedWasOverview: mergedMenuLastSelectedWasOverview,
             mergedOverviewSelectedProvidersRaw: mergedOverviewSelectedProvidersRaw,

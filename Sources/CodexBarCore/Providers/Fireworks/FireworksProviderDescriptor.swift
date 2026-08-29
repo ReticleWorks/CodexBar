@@ -37,15 +37,15 @@ public enum FireworksProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .fireworks),
                 iconResourceName: "ProviderIcon-fireworks",
-                color: ProviderColor(red: 242 / 255, green: 91 / 255, blue: 28 / 255),
+                color: ProviderColor(hex: 0x6720FF),
                 confettiPalette: [
-                    ProviderColor(hex: 0xE65618),
-                    ProviderColor(hex: 0xFF9A3C),
-                    ProviderColor(hex: 0x2B2B2E),
+                    ProviderColor(hex: 0x6720FF),
+                    ProviderColor(hex: 0xE6EAF4),
+                    ProviderColor(hex: 0xF2FFFD),
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
-                noDataMessage: { "Fireworks spend comes from the billing summary API; cost history is not tracked." }),
+                noDataMessage: { "Fireworks spend history comes from the rated usage-cost API." }),
             presentation: ProviderUsagePresentation(
                 costPresenter: { snapshot in
                     let style: ProviderCostMenuCardStyle = (snapshot.providerCost?.limit ?? 1) <= 0

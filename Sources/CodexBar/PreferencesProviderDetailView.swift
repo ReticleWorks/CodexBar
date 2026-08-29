@@ -329,7 +329,7 @@ private struct ProviderDetailInfoRows: View {
         if self.store.unavailableMessage(for: self.provider) != nil {
             return L("Unavailable")
         }
-        return L("Not fetched yet")
+        return L("Unavailable")
     }
 }
 

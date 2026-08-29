@@ -383,7 +383,8 @@ public enum CodexOAuthFetchError: LocalizedError, Sendable {
             }
             return "Codex API error \(code)."
         case let .networkError(error):
-            return "Network error: \(error.localizedDescription)"
+            let underlying = error as NSError
+            return "Network error [\(underlying.domain) \(underlying.code)]: \(error.localizedDescription)"
         }
     }
 }
@@ -427,7 +428,7 @@ public enum CodexOAuthUsageFetcher {
         }
 
         do {
-            let response = try await transport.response(for: request)
+            let response = try await transport.response(for: request, retryPolicy: .transientIdempotent)
             let data = response.data
 
             switch response.statusCode {

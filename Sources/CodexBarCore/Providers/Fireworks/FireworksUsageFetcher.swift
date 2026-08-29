@@ -25,26 +25,58 @@ public struct FireworksUsageSnapshot: Sendable {
 }
 
 public struct FireworksUsageSummary: Sendable {
-    /// Sum of rated line items from `GET /v1/accounts/{slug}/billing/summary` for the
-    /// last 30 days. Fireworks exposes no credit-balance API, so spend is the only
-    /// usable usage signal.
+    /// Exact rated subtotal returned by Fireworks for the last 30 days.
     public let last30DaysSpend: Double?
     public let currencyCode: String?
+    public let dailyCosts: [FireworksDailyCost]
     public let updatedAt: Date
 
     public init(
         last30DaysSpend: Double?,
         currencyCode: String?,
+        dailyCosts: [FireworksDailyCost] = [],
         updatedAt: Date)
     {
         self.last30DaysSpend = last30DaysSpend
         self.currencyCode = currencyCode
+        self.dailyCosts = dailyCosts
         self.updatedAt = updatedAt
     }
 
     public func toUsageSnapshot() -> UsageSnapshot {
-        // Fireworks is prepaid with no quota windows, so no RateWindows are synthesized.
-        UsageSnapshot(
+        let costUsage: CostUsageTokenSnapshot? = if let last30DaysSpend, let currencyCode {
+            CostUsageTokenSnapshot(
+                sessionTokens: nil,
+                sessionCostUSD: nil,
+                last30DaysTokens: nil,
+                last30DaysCostUSD: last30DaysSpend,
+                currencyCode: currencyCode,
+                historyDays: 30,
+                historyLabel: "Rated usage · last 30 days",
+                costProvenance: .vendorMetered,
+                daily: self.dailyCosts.map { day in
+                    CostUsageDailyReport.Entry(
+                        date: day.date,
+                        inputTokens: nil,
+                        outputTokens: nil,
+                        totalTokens: nil,
+                        requestCount: nil,
+                        costUSD: day.cost,
+                        modelsUsed: day.models.map(\.name),
+                        modelBreakdowns: day.models.map { model in
+                            CostUsageDailyReport.ModelBreakdown(
+                                modelName: model.name,
+                                costUSD: model.cost,
+                                totalTokens: nil,
+                                requestCount: nil)
+                        },
+                        pricedRequestCount: 1)
+                },
+                updatedAt: self.updatedAt)
+        } else {
+            nil
+        }
+        return UsageSnapshot(
             primary: nil,
             secondary: nil,
             tertiary: nil,
@@ -58,8 +90,31 @@ public struct FireworksUsageSummary: Sendable {
                         updatedAt: self.updatedAt)
                 }
             },
+            costUsage: costUsage,
             updatedAt: self.updatedAt,
             identity: nil)
+    }
+}
+
+public struct FireworksDailyCost: Sendable, Equatable {
+    public struct ModelCost: Sendable, Equatable {
+        public let name: String
+        public let cost: Double
+
+        public init(name: String, cost: Double) {
+            self.name = name
+            self.cost = cost
+        }
+    }
+
+    public let date: String
+    public let cost: Double
+    public let models: [ModelCost]
+
+    public init(date: String, cost: Double, models: [ModelCost]) {
+        self.date = date
+        self.cost = cost
+        self.models = models
     }
 }
 
@@ -186,25 +241,11 @@ public struct FireworksUsageFetcher: Sendable {
         transport: any ProviderHTTPTransport,
         now: Date) async throws -> FireworksUsageSummary
     {
-        let startTime = now.addingTimeInterval(-TimeInterval(self.lookbackDays * 24 * 60 * 60))
-        var request = try URLRequest(
-            url: Self.resolveSummaryURL(accountSlug: accountSlug, startTime: startTime, endTime: now))
-        self.authorize(&request, apiKey: apiKey)
-        let response = try await transport.response(for: request)
-
-        switch response.statusCode {
-        case 200:
-            break
-        case 401, 403:
-            throw FireworksUsageError.authenticationRejected
-        case 429:
-            throw FireworksUsageError.rateLimited
-        default:
-            Self.log.error("Fireworks API returned HTTP \(response.statusCode)")
-            throw FireworksUsageError.apiError(response.statusCode)
-        }
-
-        return try self.parseSummary(data: response.data, now: now)
+        try await self.queryUsageCosts(
+            apiKey: apiKey,
+            accountSlug: accountSlug,
+            transport: transport,
+            now: now)
     }
 
     private static func listAccountSlugs(
@@ -215,7 +256,7 @@ public struct FireworksUsageFetcher: Sendable {
         var pageToken: String?
         repeat {
             var request = URLRequest(url: self.resolveAccountsURL(pageToken: pageToken))
-            self.authorize(&request, apiKey: apiKey)
+            self.authorize(&request, apiKey: apiKey, method: "GET")
             let response = try await transport.response(for: request)
             switch response.statusCode {
             case 200:
@@ -258,11 +299,123 @@ public struct FireworksUsageFetcher: Sendable {
         return slug
     }
 
-    private static func authorize(_ request: inout URLRequest, apiKey: String) {
-        request.httpMethod = "GET"
+    private static func authorize(_ request: inout URLRequest, apiKey: String, method: String) {
+        request.httpMethod = method
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if method == "POST" {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         request.timeoutInterval = self.timeoutSeconds
+    }
+
+    private static func queryUsageCosts(
+        apiKey: String,
+        accountSlug: String,
+        transport: any ProviderHTTPTransport,
+        now: Date) async throws -> FireworksUsageSummary
+    {
+        let startTime = now.addingTimeInterval(-TimeInterval(self.lookbackDays * 24 * 60 * 60))
+        let url = try self.resolveUsageCostsURL(accountSlug: accountSlug)
+        var pageToken: String?
+        var rows: [FireworksUsageCostRow] = []
+        var subtotal: FireworksMoney?
+        repeat {
+            var request = URLRequest(url: url)
+            self.authorize(&request, apiKey: apiKey, method: "POST")
+            var body: [String: Any] = [
+                "startTime": self.isoString(startTime),
+                "endTime": self.isoString(now),
+                "scope": "ACCOUNT",
+                "groupBy": ["DAY", "MODEL"],
+                "pageSize": 1000,
+            ]
+            if let pageToken { body["pageToken"] = pageToken }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+            let response = try await transport.response(for: request)
+            switch response.statusCode {
+            case 200: break
+            case 401, 403: throw FireworksUsageError.authenticationRejected
+            case 429: throw FireworksUsageError.rateLimited
+            default:
+                Self.log.error("Fireworks usage-cost API returned HTTP \(response.statusCode)")
+                throw FireworksUsageError.apiError(response.statusCode)
+            }
+            let page: FireworksUsageCostsResponse
+            do {
+                page = try JSONDecoder().decode(FireworksUsageCostsResponse.self, from: response.data)
+            } catch {
+                throw FireworksUsageError.parseFailed(error.localizedDescription)
+            }
+            rows.append(contentsOf: page.rows ?? [])
+            if subtotal == nil { subtotal = page.subtotal }
+            pageToken = page.nextPageToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if pageToken?.isEmpty == true { pageToken = nil }
+        } while pageToken != nil
+        return try self.makeUsageCostSummary(rows: rows, subtotal: subtotal, now: now)
+    }
+
+    public static func resolveUsageCostsURL(accountSlug: String) throws -> URL {
+        guard self.isValidAccountSlug(accountSlug),
+              let url = URL(
+                  string: "https://api.fireworks.ai/v1/accounts/\(accountSlug)/usageCosts:query")
+        else {
+            throw FireworksUsageError.invalidAccountSlug(accountSlug)
+        }
+        return url
+    }
+
+    static func _parseUsageCostsForTesting(_ data: Data, now: Date = Date()) throws -> FireworksUsageSummary {
+        let response: FireworksUsageCostsResponse
+        do {
+            response = try JSONDecoder().decode(FireworksUsageCostsResponse.self, from: data)
+        } catch {
+            throw FireworksUsageError.parseFailed(error.localizedDescription)
+        }
+        return try self.makeUsageCostSummary(
+            rows: response.rows ?? [],
+            subtotal: response.subtotal,
+            now: now)
+    }
+
+    private static func makeUsageCostSummary(
+        rows: [FireworksUsageCostRow],
+        subtotal: FireworksMoney?,
+        now: Date) throws -> FireworksUsageSummary
+    {
+        let subtotalCurrency = subtotal?.currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var byDay: [String: [String: Double]] = [:]
+        for row in rows {
+            guard let start = row.dimensions?.startTime, start.count >= 10 else { continue }
+            let day = String(start.prefix(10))
+            let model = row.dimensions?.model?.split(separator: "/").last.map(String.init) ?? "Unknown model"
+            let value = try self.moneyValue(row.subtotal) ?? 0
+            byDay[day, default: [:]][model, default: 0] += value
+        }
+        let daily = byDay.keys.sorted().map { day in
+            let models = byDay[day, default: [:]].map { name, cost in
+                FireworksDailyCost.ModelCost(name: name, cost: cost)
+            }.sorted { $0.cost > $1.cost }
+            return FireworksDailyCost(date: day, cost: models.reduce(0) { $0 + $1.cost }, models: models)
+        }
+        let rowCurrency = rows.compactMap { row in
+            row.subtotal?.currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
+        let currency = subtotalCurrency.flatMap { $0.isEmpty ? nil : $0 } ?? rowCurrency
+        let total = try self.moneyValue(subtotal) ?? (daily.isEmpty ? nil : daily.reduce(0) { $0 + $1.cost })
+        return FireworksUsageSummary(
+            last30DaysSpend: total,
+            currencyCode: currency,
+            dailyCosts: daily,
+            updatedAt: now)
+    }
+
+    private static func moneyValue(_ money: FireworksMoney?) throws -> Double? {
+        guard let money else { return nil }
+        guard let units = Double(money.units ?? "0") else {
+            throw FireworksUsageError.parseFailed("invalid money value")
+        }
+        return units + Double(money.nanos ?? 0) / 1_000_000_000
     }
 
     /// Characters permitted in a Fireworks account slug. Fireworks slugs are simple
@@ -366,6 +519,22 @@ public struct FireworksUsageFetcher: Sendable {
 private struct FireworksBillingSummaryResponse: Decodable {
     let lineItems: [FireworksLineItem]?
     let usageBuckets: [FireworksUsageBucket]?
+}
+
+private struct FireworksUsageCostsResponse: Decodable {
+    let rows: [FireworksUsageCostRow]?
+    let nextPageToken: String?
+    let subtotal: FireworksMoney?
+}
+
+private struct FireworksUsageCostRow: Decodable {
+    let dimensions: FireworksUsageCostDimensions?
+    let subtotal: FireworksMoney?
+}
+
+private struct FireworksUsageCostDimensions: Decodable {
+    let startTime: String?
+    let model: String?
 }
 
 private struct FireworksAccountsResponse: Decodable {

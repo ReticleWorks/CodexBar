@@ -2,8 +2,19 @@ import CodexBarCore
 import SwiftUI
 import WidgetKit
 
+// Command Line Tools does not ship SwiftUIMacros, so keep the pre-macro EnvironmentKey form.
+// swiftformat:disable environmentEntry
+private struct WidgetUsageShowsUsedEnvironmentKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+// swiftformat:enable environmentEntry
+
 extension EnvironmentValues {
-    @Entry fileprivate var widgetUsageShowsUsed: Bool = false
+    fileprivate var widgetUsageShowsUsed: Bool {
+        get { self[WidgetUsageShowsUsedEnvironmentKey.self] }
+        set { self[WidgetUsageShowsUsedEnvironmentKey.self] = newValue }
+    }
 }
 
 struct CodexBarUsageWidgetView: View {

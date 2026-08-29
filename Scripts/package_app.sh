@@ -130,6 +130,7 @@ private extension Bundle {
         return Bundle.main
     }()
 }
+
 """
 
 marker = "}\n\n\nextension Data {"
@@ -141,11 +142,37 @@ path.write_text(text)
 PY
 }
 
+patch_keyboard_shortcuts_previews() {
+  local recorder_path="$ROOT/.build/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Recorder.swift"
+  if [[ ! -f "$recorder_path" ]] || grep -q "canImport(PreviewsMacros)" "$recorder_path"; then
+    return 0
+  fi
+
+  chmod +w "$recorder_path" || true
+  python3 - "$recorder_path" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+marker = "\n#Preview {"
+if marker not in text:
+    raise SystemExit("Preview marker not found in Recorder.swift; patch failed.")
+text = text.replace(marker, "\n#if canImport(PreviewsMacros)\n#Preview {", 1)
+final_endif = text.rfind("\n#endif")
+if final_endif < 0:
+    raise SystemExit("Final conditional marker not found in Recorder.swift; patch failed.")
+text = text[:final_endif] + "\n#endif" + text[final_endif:]
+path.write_text(text)
+PY
+}
+
 KEYBOARD_SHORTCUTS_UTIL="$ROOT/.build/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
 if [[ ! -f "$KEYBOARD_SHORTCUTS_UTIL" ]]; then
-  swift build -c "$CONF" --arch "${ARCH_LIST[0]}"
+  swift package resolve
 fi
 patch_keyboard_shortcuts
+patch_keyboard_shortcuts_previews
 
 # Resolve SwiftPM's current output path without relying on a fixed build-system layout.
 # The output variable keeps the per-arch cache in this shell instead of losing it to
@@ -509,8 +536,12 @@ strip_release_binary "$APP/Contents/Helpers/CodexBarCLI"
 # Watchdog helper: ensures `claude` probes die when CodexBar crashes/gets killed.
 install_binary "CodexBarClaudeWatchdog" "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
 strip_release_binary "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
-install_widget_extension
-strip_release_binary "$APP/Contents/PlugIns/CodexBarWidget.appex/Contents/MacOS/CodexBarWidget"
+if [[ "${CODEXBAR_SKIP_WIDGET:-0}" != "1" ]]; then
+  install_widget_extension
+  strip_release_binary "$APP/Contents/PlugIns/CodexBarWidget.appex/Contents/MacOS/CodexBarWidget"
+else
+  echo "Skipping CodexBarWidget extension for a command-line-tools build." >&2
+fi
 
 swiftpm_bin_path "${ARCH_LIST[0]}" PREFERRED_BUILD_DIR
 

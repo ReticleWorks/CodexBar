@@ -181,7 +181,10 @@ extension UsageStore {
         // every row and then reject its whoami identity against other accounts.
         guard !self.shouldUseAmbientCodexPATForUsage() else { return false }
         let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
-        return self.settings.multiAccountMenuLayout == .stacked && projection.visibleAccounts.count > 1
+        // Segmented selectors need the same account hydration as stacked cards. Without fan-out,
+        // selecting an otherwise healthy profile briefly renders “Not fetched yet” and only the
+        // active account survives in the persistent snapshot store.
+        return projection.visibleAccounts.count > 1
     }
 
     func shouldUseAmbientCodexPATForUsage() -> Bool {

@@ -27,6 +27,12 @@ struct ProviderDetailSectionsContentTests {
         #expect(size.height > 58)
     }
 
+    @Test
+    func `generic detail chart shortens iso dates without changing ordinary labels`() {
+        #expect(ProviderDetailChartLabelFormatter.axisLabel("2026-08-29") == "Aug 29")
+        #expect(ProviderDetailChartLabelFormatter.axisLabel("This week") == "This week")
+    }
+
     private static func section(kind: ProviderDetailSection.Chart.Kind) throws -> ProviderDetailSection {
         try ProviderDetailSection(
             title: "Usage",

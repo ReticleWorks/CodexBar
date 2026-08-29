@@ -158,6 +158,11 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
         XCTAssertNil(projected[3].snapshot)
         XCTAssertNotNil(projected[3].error)
         XCTAssertNil(projected[0].error)
+
+        let aliased = StatusItemController.projectedCodexAccounts(
+            display: display,
+            displayAliases: ["codex1@example.com": "infra@reticle"])
+        XCTAssertEqual(aliased[0].displayLabel, "infra@reticle")
     }
 
     func test_codexAccountProjectionIncludesMonthlyCreditInPlanningSnapshot() {

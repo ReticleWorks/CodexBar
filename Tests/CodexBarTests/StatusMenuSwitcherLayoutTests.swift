@@ -6,6 +6,21 @@ import Testing
 @Suite(.serialized)
 struct StatusMenuSwitcherLayoutTests {
     @Test
+    func `five stacked provider choices use two rows so names remain legible`() {
+        let view = ProviderSwitcherView(
+            providers: [.codex, .claude, .amp, .openrouter],
+            selected: .overview,
+            includesOverview: true,
+            width: 300,
+            showsIcons: true,
+            iconProvider: { _ in NSImage(size: NSSize(width: 16, height: 16)) },
+            weeklyRemainingProvider: { _ in nil },
+            onSelect: { _ in })
+
+        #expect(view._test_rowCount() == 2)
+    }
+
+    @Test
     func `overview switcher segment matches provider segment height when quota bars are present`() throws {
         let view = ProviderSwitcherView(
             providers: [.claude, .grok, .cursor],

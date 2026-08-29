@@ -70,6 +70,7 @@ extension StatusItemController {
         guard !display.showsWorkspaceGroups else { return false }
         let projected = Self.projectedCodexAccounts(
             display: display,
+            displayAliases: self.settings.codexDisplayAliases,
             includeOptionalCredits: self.settings.showOptionalCreditsAndExtraUsage)
         let plan = self.compactAccountPlan(for: .codex, accounts: projected)
         guard plan.usesCompactLayout else { return false }
@@ -258,6 +259,7 @@ extension StatusItemController {
 
     static func projectedCodexAccounts(
         display: CodexAccountMenuDisplay,
+        displayAliases: [String: String] = [:],
         includeOptionalCredits: Bool = true) -> [ProviderAccountUsageSnapshot]
     {
         let snapshotsByAccountID = Dictionary(uniqueKeysWithValues: display.snapshots.map { ($0.account.id, $0) })
@@ -269,7 +271,7 @@ extension StatusItemController {
             return ProviderAccountUsageSnapshot(
                 id: ProviderAccountIdentity(source: "codex-account", opaqueID: account.id),
                 provider: .codex,
-                displayLabel: account.menuDisplayName,
+                displayLabel: displayAliases[account.email.lowercased()] ?? account.menuDisplayName,
                 isActive: isActive,
                 canActivate: !isActive,
                 snapshot: Self.snapshotIncludingMonthlyCredit(

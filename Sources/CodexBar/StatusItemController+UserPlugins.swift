@@ -108,7 +108,7 @@ private struct UserPluginMenuCardView: View {
             } else if let error {
                 Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             } else {
-                Text("No usage fetched yet").font(.caption).foregroundStyle(.secondary)
+                Text("Usage unavailable").font(.caption).foregroundStyle(.red)
             }
         }
         .padding(.horizontal, UsageMenuCardLayout.horizontalPadding)

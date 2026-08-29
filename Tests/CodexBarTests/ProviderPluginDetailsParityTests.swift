@@ -63,6 +63,49 @@ struct ProviderPluginDetailsParityTests {
         ])
     }
 
+    @Test(arguments: Self.openRouterEngines)
+    func `OpenRouter accepts reasoning as an independent activity counter`(
+        engine: ProviderPluginEngineKind) async throws
+    {
+        let transport = ProviderHTTPTransportHandler { request in
+            let body: String
+            switch request.url?.path {
+            case "/api/v1/credits":
+                body = #"{"data":{"total_credits":5,"total_usage":3}}"#
+            case "/api/v1/key":
+                body = #"{"data":{"limit":30,"limit_remaining":20,"usage":10}}"#
+            case "/api/v1/activity":
+                body = #"""
+                {"data":[{"date":"2026-08-28","model_permaslug":"openai/gpt-oss-120b",
+                "prompt_tokens":1,"completion_tokens":2,"reasoning_tokens":5,"requests":1,
+                "usage":0.1,"byok_usage_inference":0}]}
+                """#
+            default:
+                throw FixtureError.unexpectedURL(request.url)
+            }
+            let response = try #require(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(body.utf8), response)
+        }
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-08-29T12:00:00Z"))
+        let snapshot = try await ProviderPluginRuntime(
+            bundledPlugin: "openrouter",
+            transport: transport,
+            engine: engine,
+            contextOptions: ProviderPluginContextOptions(optionalRequestTimeoutSeconds: 15))
+            .fetchUsage(
+                secrets: [
+                    "OPENROUTER_API_KEY": "fixture-key",
+                    "OPENROUTER_MANAGEMENT_API_KEY": "management-key",
+                ],
+                now: now)
+
+        #expect(snapshot.costUsage?.daily.count == 1)
+        #expect(snapshot.costUsage?.daily.first?.outputTokens == 2)
+        #expect(snapshot.costUsage?.daily.first?.reasoningTokens == 5)
+        #expect(snapshot.costUsage?.last30DaysCostUSD == 0.1)
+    }
+
     @Test
     func `OpenAI prepends JS only when the prototype flag is enabled`() async {
         let fixtures: [(UsageProvider, [String], [String])] = [

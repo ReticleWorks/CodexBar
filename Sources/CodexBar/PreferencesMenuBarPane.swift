@@ -80,6 +80,16 @@ struct MenuBarPane: View {
             }
 
             Section {
+                Toggle(isOn: self.$settings.floatingSidebarEnabled) {
+                    SettingsRowLabel(
+                        "Floating usage sidebar",
+                        subtitle: "Reveal an auto-hidden, provider-colored usage panel at the right screen edge.")
+                }
+            } header: {
+                Text("Desktop")
+            }
+
+            Section {
                 Toggle(isOn: self.$settings.randomBlinkEnabled) {
                     SettingsRowLabel(L("surprise_me_title"), subtitle: L("surprise_me_subtitle"))
                 }

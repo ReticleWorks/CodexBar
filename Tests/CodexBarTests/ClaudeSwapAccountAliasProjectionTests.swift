@@ -6,6 +6,23 @@ struct ClaudeSwapAccountAliasProjectionTests {
     private let now = Date(timeIntervalSince1970: 1_782_000_000)
 
     @Test
+    func `configured aliases can use exact account shorthand`() {
+        let snapshots = ClaudeSwapAccountProjection.accountSnapshots(
+            from: self.list(
+                self.row(number: 1, email: "infra@reticle-works.com", alias: "infra.reticle"),
+                self.row(number: 2, email: "rherr@american.edu", alias: "rherr.american"),
+                self.row(number: 3, email: "ai.herr.trey@gmail.com", alias: "ai.herr.trey")),
+            displayAliases: [
+                "infra@reticle-works.com": "infra@reticle",
+                "rherr@american.edu": "rherr@american",
+                "ai.herr.trey@gmail.com": "ai.herr.trey",
+            ],
+            now: self.now)
+
+        #expect(snapshots.map(\.displayLabel) == ["infra@reticle", "rherr@american", "ai.herr.trey"])
+    }
+
+    @Test
     func `keeps unique emails as email only even when organization names are present`() {
         let snapshots = ClaudeSwapAccountProjection.accountSnapshots(
             from: self.list(

@@ -523,6 +523,10 @@ final class ProviderSwitcherView: NSView {
         let fourRowThreshold = 15
         let minimumComfortableAverage: CGFloat = stackedIcons ? 50 : 54
         if count >= fourRowThreshold { return maxRows }
+        // Five stacked labels technically fit in one row, but longer provider names such as
+        // OpenRouter become truncated and hard to distinguish. Keep four providers compact;
+        // use two rows once the switcher grows beyond that.
+        if stackedIcons, count >= 5 { return min(2, maxRows) }
         if maxAllowedSegmentWidth >= minimumComfortableAverage { return 1 }
 
         for rows in 2...maxRows {
@@ -1323,8 +1327,263 @@ final class TokenAccountSwitcherView: NSView {
     #endif
 }
 
+/// Segmented account selector for the claude-swap adapter. Its layout deliberately
+/// matches `CodexAccountSwitcherView`: up to three accounts use one row and larger
+/// account sets use two rows.
+final class ClaudeSwapAccountSwitcherView: NSView {
+    private let accounts: [ProviderAccountUsageSnapshot]
+    private let onSelect: (ProviderAccountUsageSnapshot) -> Void
+    private var selectedAccountID: ProviderAccountIdentity?
+    private var pressedAccountID: ProviderAccountIdentity?
+    private var buttons: [NSButton] = []
+    private let preferredSize: NSSize
+    private let rowSpacing: CGFloat = 4
+    private let rowHeight: CGFloat = 26
+    private let selectedBackground = NSColor(
+        red: 0xD9 / 255,
+        green: 0x77 / 255,
+        blue: 0x57 / 255,
+        alpha: 1).cgColor
+    private let unselectedBackground = NSColor.clear.cgColor
+    private let selectedTextColor = NSColor(
+        red: 0x14 / 255,
+        green: 0x14 / 255,
+        blue: 0x13 / 255,
+        alpha: 1)
+    private let unselectedTextColor = NSColor.secondaryLabelColor
+
+    init(
+        accounts: [ProviderAccountUsageSnapshot],
+        selectedAccountID: ProviderAccountIdentity?,
+        width: CGFloat,
+        onSelect: @escaping (ProviderAccountUsageSnapshot) -> Void)
+    {
+        self.accounts = accounts
+        self.onSelect = onSelect
+        self.selectedAccountID = selectedAccountID ?? accounts.first?.id
+        let useTwoRows = accounts.count > 3
+        let rows = useTwoRows ? 2 : 1
+        let height = self.rowHeight * CGFloat(rows) + (useTwoRows ? self.rowSpacing : 0)
+        self.preferredSize = NSSize(width: width, height: height)
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        self.wantsLayer = true
+        self.buildButtons(useTwoRows: useTwoRows)
+        self.updateButtonStyles()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        self.preferredSize
+    }
+
+    override var fittingSize: NSSize {
+        self.preferredSize
+    }
+
+    private func buildButtons(useTwoRows: Bool) {
+        let perRow = useTwoRows ? Int(ceil(Double(self.accounts.count) / 2.0)) : self.accounts.count
+        let rows: [[ProviderAccountUsageSnapshot]] = if useTwoRows {
+            [Array(self.accounts.prefix(perRow)), Array(self.accounts.dropFirst(perRow))]
+        } else {
+            [self.accounts]
+        }
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = self.rowSpacing
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        for rowAccounts in rows {
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fillEqually
+            row.spacing = self.rowSpacing
+            row.translatesAutoresizingMaskIntoConstraints = false
+
+            for account in rowAccounts {
+                let button = PaddedToggleButton(
+                    title: account.displayLabel,
+                    target: self,
+                    action: #selector(self.handleSelect))
+                button.identifier = NSUserInterfaceItemIdentifier(Self.identifier(for: account.id))
+                button.toolTip = Self.toolTip(for: account)
+                button.isEnabled = account.isActive || account.canActivate
+                button.isBordered = false
+                button.setButtonType(.toggle)
+                button.controlSize = .small
+                button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+                button.cell?.lineBreakMode = account.displayLabel.contains("@")
+                    ? .byTruncatingMiddle
+                    : .byTruncatingTail
+                button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                button.wantsLayer = true
+                button.layer?.cornerRadius = 6
+                row.addArrangedSubview(button)
+                self.buttons.append(button)
+            }
+
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+
+        self.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 6),
+            stack.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -6),
+            stack.topAnchor.constraint(equalTo: self.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+            stack.heightAnchor.constraint(equalToConstant: self.rowHeight * CGFloat(rows.count) +
+                (useTwoRows ? self.rowSpacing : 0)),
+        ])
+    }
+
+    private func updateButtonStyles() {
+        for button in self.buttons {
+            let selected = button.identifier?.rawValue == self.selectedAccountID.map(Self.identifier(for:))
+            button.state = selected ? .on : .off
+            button.layer?.backgroundColor = selected ? self.selectedBackground : self.unselectedBackground
+            button.contentTintColor = selected ? self.selectedTextColor : self.unselectedTextColor
+        }
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let descendant = super.hitTest(point)
+        if descendant != nil, descendant !== self {
+            self.toolTip = (descendant as? NSButton)?.toolTip
+            return self
+        }
+        self.toolTip = nil
+        return descendant
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let location = self.convert(event.locationInWindow, from: nil)
+        self.pressedAccountID = self.account(at: location)?.id
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer { self.pressedAccountID = nil }
+        guard let pressedAccountID = self.pressedAccountID else { return }
+        let location = self.convert(event.locationInWindow, from: nil)
+        guard let account = self.account(at: location),
+              account.id == pressedAccountID
+        else {
+            return
+        }
+        self.applySelection(account)
+    }
+
+    @objc private func handleSelect(_ sender: NSButton) {
+        guard let account = self.account(for: sender) else { return }
+        self.applySelection(account)
+    }
+
+    private func applySelection(_ account: ProviderAccountUsageSnapshot) {
+        guard account.isActive || account.canActivate else { return }
+        self.selectedAccountID = account.id
+        self.updateButtonStyles()
+        self.onSelect(account)
+    }
+
+    private func account(for button: NSButton) -> ProviderAccountUsageSnapshot? {
+        guard let identifier = button.identifier?.rawValue else { return nil }
+        return self.accounts.first { Self.identifier(for: $0.id) == identifier }
+    }
+
+    private func account(at pointInSelf: NSPoint) -> ProviderAccountUsageSnapshot? {
+        guard let identifier = self.buttons.first(where: {
+            self.convert($0.bounds, from: $0).contains(pointInSelf)
+        })?.identifier?.rawValue else { return nil }
+        return self.accounts.first { Self.identifier(for: $0.id) == identifier }
+    }
+
+    private static func identifier(for id: ProviderAccountIdentity) -> String {
+        "\(id.source):\(id.opaqueID)"
+    }
+
+    private static func toolTip(for account: ProviderAccountUsageSnapshot) -> String {
+        guard let error = account.error?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !error.isEmpty
+        else {
+            return account.displayLabel
+        }
+        return "\(account.displayLabel) — \(error)"
+    }
+
+    #if DEBUG
+    func _test_buttonTitles() -> [String] {
+        self.buttons.map(\.title)
+    }
+
+    func _test_buttonToolTips() -> [String?] {
+        self.buttons.map(\.toolTip)
+    }
+
+    func _test_selectAccount(id: ProviderAccountIdentity) {
+        guard let account = self.accounts.first(where: { $0.id == id }) else { return }
+        self.applySelection(account)
+    }
+
+    func _test_simulateRuntimeClick(id: ProviderAccountIdentity) -> Bool {
+        guard let button = self.buttons.first(where: {
+            $0.identifier?.rawValue == Self.identifier(for: id)
+        }) else { return false }
+        self.updateConstraintsForSubtreeIfNeeded()
+        self.layoutSubtreeIfNeeded()
+        let point = self.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
+        guard let mouseDownEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1),
+            let mouseUpEvent = NSEvent.mouseEvent(
+                with: .leftMouseUp,
+                location: point,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 2,
+                clickCount: 1,
+                pressure: 0)
+        else {
+            return false
+        }
+        self.mouseDown(with: mouseDownEvent)
+        self.mouseUp(with: mouseUpEvent)
+        return self.selectedAccountID == id
+    }
+
+    func _test_hitTestSwallowsChildButton(id: ProviderAccountIdentity) -> Bool {
+        guard let button = self.buttons.first(where: {
+            $0.identifier?.rawValue == Self.identifier(for: id)
+        }) else { return false }
+        self.updateConstraintsForSubtreeIfNeeded()
+        self.layoutSubtreeIfNeeded()
+        let point = self.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
+        return self.hitTest(point) === self
+    }
+    #endif
+}
+
 final class CodexAccountSwitcherView: NSView {
     private let accounts: [CodexVisibleAccount]
+    private let displayAliases: [String: String]
     private let onSelect: (CodexVisibleAccount) -> Void
     private var selectedAccountID: String
     private var pressedAccountID: String?
@@ -1337,16 +1596,18 @@ final class CodexAccountSwitcherView: NSView {
     private let selectedTextColor = NSColor.white
     private let unselectedTextColor = NSColor.secondaryLabelColor
     private let buttonFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-    private let buttonHorizontalPadding: CGFloat = 14
+    private let buttonHorizontalPadding: CGFloat = 8
     private let buttonSideInset: CGFloat = 6
 
     init(
         accounts: [CodexVisibleAccount],
+        displayAliases: [String: String] = [:],
         selectedAccountID: String?,
         width: CGFloat,
         onSelect: @escaping (CodexVisibleAccount) -> Void)
     {
         self.accounts = accounts
+        self.displayAliases = displayAliases
         self.onSelect = onSelect
         self.selectedAccountID = selectedAccountID ?? accounts.first?.id ?? ""
         let useTwoRows = accounts.count > 3
@@ -1401,8 +1662,9 @@ final class CodexAccountSwitcherView: NSView {
                     title: title,
                     target: self,
                     action: #selector(self.handleSelect))
+                button.contentPadding = NSEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
                 button.identifier = NSUserInterfaceItemIdentifier(account.id)
-                button.toolTip = account.menuDisplayName
+                button.toolTip = self.displayName(for: account)
                 button.isBordered = false
                 button.setButtonType(.toggle)
                 button.controlSize = .small
@@ -1439,8 +1701,12 @@ final class CodexAccountSwitcherView: NSView {
 
     private func compactButtonTitle(for account: CodexVisibleAccount, buttonWidth: CGFloat) -> String {
         let availableTextWidth = max(24, buttonWidth - self.buttonHorizontalPadding)
-        if self.textWidth(account.menuDisplayName) <= availableTextWidth {
-            return account.menuDisplayName
+        let displayName = self.displayName(for: account)
+        if self.textWidth(displayName) <= availableTextWidth {
+            return displayName
+        }
+        if self.displayAliases[account.email.lowercased()] != nil {
+            return self.truncateMiddle(displayName, toFit: availableTextWidth)
         }
 
         guard let workspace = account.menuWorkspaceLabel else {
@@ -1482,6 +1748,10 @@ final class CodexAccountSwitcherView: NSView {
         }
 
         return title
+    }
+
+    private func displayName(for account: CodexVisibleAccount) -> String {
+        self.displayAliases[account.email.lowercased()] ?? account.menuDisplayName
     }
 
     private func truncateTail(_ text: String, toFit width: CGFloat) -> String {

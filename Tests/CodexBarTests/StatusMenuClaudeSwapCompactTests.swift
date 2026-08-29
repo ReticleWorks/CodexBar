@@ -10,7 +10,9 @@ import XCTest
 @MainActor
 final class StatusMenuClaudeSwapCompactTests: XCTestCase {
     private func makeController(
-        accounts: [ProviderAccountUsageSnapshot]) -> (controller: StatusItemController, store: UsageStore)
+        accounts: [ProviderAccountUsageSnapshot],
+        layout: MultiAccountMenuLayout = .stacked)
+        -> (controller: StatusItemController, store: UsageStore)
     {
         StatusItemController.menuCardRenderingEnabled = false
         StatusItemController.setMenuRefreshEnabledForTesting(false)
@@ -21,6 +23,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = false
+        settings.multiAccountMenuLayout = layout
         let registry = ProviderRegistry.shared
         for provider in UsageProvider.allCases {
             guard let metadata = registry.metadata[provider] else { continue }
@@ -155,6 +158,68 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
             $0.hasPrefix("claudeSwap") || $0.hasPrefix("menuCard")
         }
         XCTAssertEqual(ids, ["menuCard-0", "menuCard-1", "menuCard-2"])
+    }
+
+    func test_segmentedLayoutShowsClaudeSwitcherAndOnlyActiveCard() throws {
+        let accounts = Array(self.sixAccounts().prefix(3))
+        let (controller, _) = self.makeController(accounts: accounts, layout: .segmented)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let menu = controller.makeMenu(for: .claude)
+        controller.menuWillOpen(menu)
+
+        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? ClaudeSwapAccountSwitcherView }.first)
+        XCTAssertEqual(switcher._test_buttonTitles(), accounts.map(\.displayLabel))
+        XCTAssertEqual(switcher._test_buttonToolTips(), accounts.map { Optional($0.displayLabel) })
+        let ids = self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }
+        XCTAssertEqual(ids, ["menuCard-0"])
+    }
+
+    func test_segmentedLayoutExplainsDisabledAccountInTooltip() {
+        let failed = ProviderAccountUsageSnapshot(
+            id: ProviderAccountIdentity(source: "claude-swap", opaqueID: "3"),
+            provider: .claude,
+            displayLabel: "infra@reticle",
+            isActive: false,
+            canActivate: false,
+            snapshot: nil,
+            error: "Session expired.",
+            sourceLabel: "claude-swap")
+        let switcher = ClaudeSwapAccountSwitcherView(
+            accounts: [failed],
+            selectedAccountID: nil,
+            width: 300,
+            onSelect: { _ in })
+
+        XCTAssertEqual(switcher._test_buttonToolTips(), ["infra@reticle — Session expired."])
+    }
+
+    func test_segmentedLayoutUsesTwoRowsForFourAccounts() throws {
+        let accounts = Array(self.sixAccounts().prefix(4))
+        let (controller, _) = self.makeController(accounts: accounts, layout: .segmented)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let menu = controller.makeMenu(for: .claude)
+        controller.menuWillOpen(menu)
+
+        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? ClaudeSwapAccountSwitcherView }.first)
+        XCTAssertEqual(switcher.fittingSize.height, 56)
+        XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard-0"])
+    }
+
+    func test_segmentedLayoutRoutesRuntimeClickToSelectedAccount() {
+        let accounts = Array(self.sixAccounts().prefix(3))
+        var selectedAccount: ProviderAccountUsageSnapshot?
+        let switcher = ClaudeSwapAccountSwitcherView(
+            accounts: accounts,
+            selectedAccountID: accounts.first?.id,
+            width: 300,
+            onSelect: { selectedAccount = $0 })
+
+        XCTAssertTrue(switcher.acceptsFirstMouse(for: nil))
+        XCTAssertTrue(switcher._test_hitTestSwallowsChildButton(id: accounts[1].id))
+        XCTAssertTrue(switcher._test_simulateRuntimeClick(id: accounts[1].id))
+        XCTAssertEqual(selectedAccount?.id, accounts[1].id)
     }
 
     func test_menuCloseResetsExpansionState() {

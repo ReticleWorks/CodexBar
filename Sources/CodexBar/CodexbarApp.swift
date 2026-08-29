@@ -406,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator?
     private var cloudSyncCoordinator: CloudSyncCoordinator?
     private var settingsWindowController: SettingsWindowController?
+    private var floatingSidebarController: FloatingUsageSidebarController?
     private lazy var placeholderSettingsWindowGuard = PlaceholderSettingsWindowGuard(
         isKnownSettingsWindow: { [weak self] window in
             self?.settingsWindowController?.window === window
@@ -438,6 +439,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 await self.runProviderLoginFlow(provider)
             })
+        self.floatingSidebarController = FloatingUsageSidebarController(
+            store: dependencies.store,
+            settings: dependencies.settings,
+            openProvider: { [weak self] provider in
+                self?.settings?.selectedMenuProvider = provider.instanceID
+                self?.statusController?.openMenuFromShortcut()
+            })
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -458,6 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.installDebugMemoryPressureObserverIfNeeded()
         #endif
         self.ensureStatusController()
+        self.floatingSidebarController?.start()
         self.closeSwiftUISettingsPlaceholderWindow()
         self.observeSettingsApplicationMenuLanguage()
         self.scheduleSettingsApplicationMenuValidation(
@@ -520,6 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.removeDebugMemoryPressureObserver()
         #endif
         self.statusController?.prepareForAppShutdown()
+        self.floatingSidebarController?.stop()
         self.confettiOverlayController.dismiss()
         self.dismissAppKitWindowsForShutdown()
         self.terminateActiveProcessesForAppShutdown()

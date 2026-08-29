@@ -128,15 +128,13 @@ struct ClaudeWebRecoveryMenuTests {
     }
 
     @Test
-    func `swap account presentation disambiguates ambient Claude Code sign in`() {
+    func `swap account presentation owns authentication and hides ambient Claude Code sign in`() {
         let actions = self.actions(
             source: .auto,
             authenticatedAccountEmail: "claude@example.com",
             claudeSwapAccountCount: 2)
 
-        #expect(actions.contains {
-            $0.0 == "Sign in with Claude Code..." && $0.1 == .switchAccount(.claude)
-        })
+        #expect(!actions.contains { $0.0 == "Sign in with Claude Code..." })
         #expect(!actions.contains { $0.0 == "Switch Account..." })
         #expect(!actions.contains { $0.0 == "Add Account..." })
     }

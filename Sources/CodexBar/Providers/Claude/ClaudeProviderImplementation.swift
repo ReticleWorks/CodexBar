@@ -348,6 +348,14 @@ struct ClaudeProviderImplementation: ProviderImplementation {
     }
 
     @MainActor
+    func showsLoginMenuAction(context: ProviderMenuLoginContext) -> Bool {
+        !ClaudeSwapMenuPrecedence.prefersClaudeSwap(
+            provider: context.provider,
+            accountCount: context.store.claudeSwapAccountSnapshots.count,
+            showSingleAccount: context.settings.claudeSwapShowSingleAccount)
+    }
+
+    @MainActor
     func loginMenuAction(context: ProviderMenuLoginContext)
         -> (label: String, action: MenuDescriptor.MenuAction)?
     {
@@ -366,7 +374,10 @@ struct ClaudeProviderImplementation: ProviderImplementation {
             provider: context.provider,
             accountCount: context.store.claudeSwapAccountSnapshots.count,
             showSingleAccount: context.settings.claudeSwapShowSingleAccount)
-        guard !context.hasAccount || swapOwnsAccountPresentation else { return nil }
+        // cswap owns authentication and account selection when its selector is present. Offering
+        // the generic Claude login action here falsely implies every app launch needs a new login
+        // and can overwrite the selected account's persistent credential chain.
+        guard !swapOwnsAccountPresentation, !context.hasAccount else { return nil }
         return (L("Sign in with Claude Code..."), .switchAccount(.claude))
     }
 

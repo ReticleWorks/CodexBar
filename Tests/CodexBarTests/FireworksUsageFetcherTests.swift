@@ -219,6 +219,33 @@ struct FireworksUsageFetcherTests {
     }
 
     @Test
+    func `usage cost rows preserve daily model history and protobuf default money fields`() throws {
+        let json = """
+        {
+          "rows": [
+            {
+              "dimensions": { "startTime": "2026-08-28T00:00:00Z", "model": "models/alpha" },
+              "subtotal": { "currencyCode": "USD", "nanos": 250000000 }
+            },
+            {
+              "dimensions": { "startTime": "2026-08-28T00:00:00Z", "model": "models/beta" },
+              "subtotal": { "currencyCode": "USD", "units": "1" }
+            }
+          ]
+        }
+        """
+
+        let summary = try FireworksUsageFetcher._parseUsageCostsForTesting(Data(json.utf8))
+
+        #expect(summary.currencyCode == "USD")
+        #expect(summary.last30DaysSpend == 1.25)
+        #expect(summary.dailyCosts.count == 1)
+        #expect(summary.dailyCosts[0].date == "2026-08-28")
+        #expect(summary.dailyCosts[0].cost == 1.25)
+        #expect(summary.dailyCosts[0].models.map(\.name) == ["beta", "alpha"])
+    }
+
+    @Test
     func `summary url carries account slug and iso window`() throws {
         let url = try FireworksUsageFetcher.resolveSummaryURL(
             accountSlug: "x0mh0x",
@@ -261,23 +288,22 @@ struct FireworksUsageFetcherTests {
         FireworksStubURLProtocol.requests = []
         FireworksStubURLProtocol.handler = { request in
             let url = try #require(request.url)
-            #expect(request.httpMethod == "GET")
-            #expect(url.absoluteString.hasPrefix("https://api.fireworks.ai/v1/accounts/x0mh0x/billing/summary?"))
-            #expect(url.absoluteString.contains("startTime="))
-            #expect(url.absoluteString.contains("endTime="))
+            #expect(request.httpMethod == "POST")
+            #expect(url.path == "/v1/accounts/x0mh0x/usageCosts:query")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fw-test-key")
             #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+            #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
             #expect(request.timeoutInterval == 15)
 
             let body = """
             {
-              "lineItems": [
+              "rows": [
                 {
-                  "category": "LLM input tokens (cached)",
-                  "totalCost": { "currencyCode": "USD", "nanos": 500000000, "units": "0" }
+                  "dimensions": { "startTime": "2026-08-29T00:00:00Z", "model": "models/test" },
+                  "subtotal": { "currencyCode": "USD", "nanos": 500000000, "units": "0" }
                 }
               ],
-              "usageBuckets": []
+              "subtotal": { "currencyCode": "USD", "nanos": 500000000, "units": "0" }
             }
             """
             let response = HTTPURLResponse(
@@ -353,8 +379,8 @@ struct FireworksUsageFetcherTests {
             if url.path == "/v1/accounts" {
                 body = #"{"accounts":[{"name":"accounts/actual-team"}]}"#
             } else {
-                #expect(url.path == "/v1/accounts/guessed-user/billing/summary")
-                body = #"{"lineItems":[],"usageBuckets":[]}"#
+                #expect(url.path == "/v1/accounts/guessed-user/usageCosts:query")
+                body = #"{"rows":[]}"#
             }
             let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, Data(body.utf8))
@@ -371,7 +397,7 @@ struct FireworksUsageFetcherTests {
                 "Fireworks account slug 'guessed-user' not found for this API key")
         }
         #expect(FireworksStubURLProtocol.requests.map(\.url?.path) == [
-            "/v1/accounts/guessed-user/billing/summary",
+            "/v1/accounts/guessed-user/usageCosts:query",
             "/v1/accounts",
         ])
     }
@@ -393,12 +419,14 @@ struct FireworksUsageFetcherTests {
             if url.path == "/v1/accounts" {
                 body = #"{"accounts":[{"name":"accounts/discovered-team","displayName":"Discovered Team"}]}"#
             } else {
-                #expect(url.path == "/v1/accounts/discovered-team/billing/summary")
+                #expect(url.path == "/v1/accounts/discovered-team/usageCosts:query")
                 body = """
                 {
-                  "lineItems": [
-                    { "totalCost": { "currencyCode": "USD", "nanos": 250000000, "units": "2" } }
-                  ]
+                  "rows": [{
+                    "dimensions": { "startTime": "2026-08-29T00:00:00Z", "model": "models/test" },
+                    "subtotal": { "currencyCode": "USD", "nanos": 250000000, "units": "2" }
+                  }],
+                  "subtotal": { "currencyCode": "USD", "nanos": 250000000, "units": "2" }
                 }
                 """
             }
@@ -417,7 +445,7 @@ struct FireworksUsageFetcherTests {
         #expect(snapshot.summary.last30DaysSpend == 2.25)
         #expect(FireworksStubURLProtocol.requests.map(\.url?.path) == [
             "/v1/accounts",
-            "/v1/accounts/discovered-team/billing/summary",
+            "/v1/accounts/discovered-team/usageCosts:query",
         ])
     }
 
@@ -470,16 +498,16 @@ struct FireworksUsageFetcherTests {
             let response: HTTPURLResponse
             let body: String
             switch url.path {
-            case "/v1/accounts/old-slug/billing/summary":
+            case "/v1/accounts/old-slug/usageCosts:query":
                 response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!
                 body = #"{"code":5,"message":"account not found"}"#
             case "/v1/accounts":
                 response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
                 body = #"{"accounts":[{"name":"accounts/current-slug"}]}"#
             default:
-                #expect(url.path == "/v1/accounts/current-slug/billing/summary")
+                #expect(url.path == "/v1/accounts/current-slug/usageCosts:query")
                 response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
-                body = #"{"lineItems":[{"totalCost":{"currencyCode":"USD","nanos":0,"units":"1"}}]}"#
+                body = #"{"rows":[],"subtotal":{"currencyCode":"USD","units":"1"}}"#
             }
             return (response, Data(body.utf8))
         }
@@ -493,9 +521,9 @@ struct FireworksUsageFetcherTests {
         #expect(snapshot.accountSlugWasDiscovered)
         #expect(snapshot.summary.last30DaysSpend == 1)
         #expect(FireworksStubURLProtocol.requests.map(\.url?.path) == [
-            "/v1/accounts/old-slug/billing/summary",
+            "/v1/accounts/old-slug/usageCosts:query",
             "/v1/accounts",
-            "/v1/accounts/current-slug/billing/summary",
+            "/v1/accounts/current-slug/usageCosts:query",
         ])
     }
 

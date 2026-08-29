@@ -140,7 +140,7 @@ public enum ClaudeProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .claude),
                 iconResourceName: "ProviderIcon-claude",
-                color: ProviderColor(red: 204 / 255, green: 124 / 255, blue: 94 / 255),
+                color: ProviderColor(hex: 0xD97757),
                 confettiPalette: [
                     ProviderColor(hex: 0xD97757),
                     ProviderColor(hex: 0xF0EEE6),

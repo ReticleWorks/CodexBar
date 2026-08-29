@@ -47,8 +47,8 @@ struct MenuCardModelCodexDegradedQuotaTests {
             now: now))
 
         #expect(model.placeholder == nil)
-        #expect(model.subtitleStyle == .info)
-        #expect(model.subtitleText == "Not fetched yet")
+        #expect(model.subtitleStyle == .error)
+        #expect(model.subtitleText == "Unavailable")
         #expect(model.usesStackedDetailLayout)
         #expect(model.tokenUsage?.sessionLine.contains("$1.08") == true)
         #expect(model.tokenUsage?.sessionLine.contains("tokens") == true)
@@ -194,8 +194,8 @@ struct MenuCardModelCodexDegradedQuotaTests {
             now: now))
 
         #expect(model.placeholder == nil)
-        #expect(model.subtitleStyle == .info)
-        #expect(model.subtitleText == "Not fetched yet")
+        #expect(model.subtitleStyle == .error)
+        #expect(model.subtitleText == "Unavailable")
         #expect(model.tokenUsage?.sessionLine.contains("$1.08") == true)
     }
 

@@ -32,6 +32,10 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case qwencloud
     case factory
     case fireworks
+    case tavily
+    case exa
+    case tinker
+    case googleai
     case gemini
     case antigravity
     case copilot
