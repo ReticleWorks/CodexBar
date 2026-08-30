@@ -100,7 +100,16 @@ extension StatusItemController {
             usesOverrideCard: surface == .overrideCard,
             historySelectionOverride: historySelectionOverride,
             now: now)
-        let fallbackAccount = accountOverride
+        let aliasedLiveAccount: AccountInfo? = if accountOverride == nil,
+                                                  let email = snapshot?.accountEmail(for: target),
+                                                  let alias = self.displayAlias(for: target, email: email)
+        {
+            AccountInfo(email: alias, plan: nil)
+        } else {
+            nil
+        }
+        let effectiveAccountOverride = accountOverride ?? aliasedLiveAccount
+        let fallbackAccount = effectiveAccountOverride
             ?? (metadata.usesAccountFallback
                 ? self.store.accountInfo(for: target)
                 : AccountInfo(email: nil, plan: nil))
@@ -116,7 +125,7 @@ extension StatusItemController {
             tokenSnapshot: tokenSnapshot,
             tokenError: tokenError,
             account: fallbackAccount,
-            accountIsAuthoritative: accountOverride != nil,
+            accountIsAuthoritative: effectiveAccountOverride != nil,
             planOverride: planOverride,
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: target),
             // Provider-level errors can belong to a different account, so
@@ -277,6 +286,18 @@ extension StatusItemController {
     func accountInfo(for account: CodexVisibleAccount) -> AccountInfo {
         let alias = self.settings.codexDisplayAliases[account.email.lowercased()]
         return AccountInfo(email: alias ?? account.email, plan: alias == nil ? account.workspaceLabel : nil)
+    }
+
+    private func displayAlias(for provider: UsageProvider, email: String) -> String? {
+        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch provider {
+        case .codex:
+            return self.settings.codexDisplayAliases[normalized]
+        case .claude:
+            return self.settings.claudeSwapDisplayAliases[normalized]
+        default:
+            return nil
+        }
     }
 
     private func quotaWarningMarkerThresholds(provider: UsageProvider, window: QuotaWarningWindow) -> [Int] {

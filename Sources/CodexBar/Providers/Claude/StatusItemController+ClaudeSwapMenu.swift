@@ -84,17 +84,25 @@ extension StatusItemController {
         header.representedObject = "claudeAPIHeader"
         menu.addItem(.separator())
         menu.addItem(header)
-        for (index, card) in cards.enumerated() {
-            menu.addItem(self.makeMenuCardItem(
+        for card in cards {
+            let detailsMenu = NSMenu()
+            detailsMenu.autoenablesItems = false
+            detailsMenu.addItem(self.makeMenuCardItem(
                 UsageMenuCardView(model: card.1, width: context.menuWidth),
                 id: "claudeAPI-\(card.0.uuidString)",
                 width: context.menuWidth,
                 heightCacheScope: "claude-api-\(card.0.uuidString)",
                 heightCacheFingerprint: card.1.heightFingerprint(section: "api"),
                 containsInteractiveControls: true))
-            if index < cards.count - 1 {
-                menu.addItem(.separator())
-            }
+            let spend = card.1.providerCost?.spendLine ?? L("Details")
+            let account = card.1.email.isEmpty ? L("Claude API") : card.1.email
+            let item = NSMenuItem(
+                title: "\(account) · \(spend)",
+                action: nil,
+                keyEquivalent: "")
+            item.representedObject = "claudeAPISummary-\(card.0.uuidString)"
+            item.submenu = detailsMenu
+            menu.addItem(item)
         }
     }
 

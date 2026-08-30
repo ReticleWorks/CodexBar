@@ -408,9 +408,14 @@ final class MenuRowContainerView: NSView, MenuCardHighlighting, MenuCardMeasurin
     }
 
     func measuredHeight(width: CGFloat) -> CGFloat {
+        let previousFrame = self.hosting.frame
         self.hosting.frame = NSRect(origin: self.hosting.frame.origin, size: NSSize(width: width, height: 1))
         self.hosting.layoutSubtreeIfNeeded()
-        return self.hosting.fittingSize.height
+        let height = self.hosting.fittingSize.height
+        self.hosting.frame = previousFrame
+        self.hosting.needsLayout = true
+        self.hosting.layoutSubtreeIfNeeded()
+        return height
     }
 
     func setHighlighted(_ highlighted: Bool) {

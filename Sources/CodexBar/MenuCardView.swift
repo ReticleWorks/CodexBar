@@ -1097,8 +1097,8 @@ extension UsageMenuCardView.Model {
         // Provider-specific by design: claude-swap accountOverride is the display label
         // (alias or email · org). Other stacked sources keep fetched identity first.
         if input.accountIsAuthoritative,
-           input.provider == .claude,
-           input.sourceLabel == ClaudeSwapAccountProjection.sourceLabel,
+           (input.provider == .codex ||
+               (input.provider == .claude && input.sourceLabel == ClaudeSwapAccountProjection.sourceLabel)),
            let email = input.account.email, !email.isEmpty
         {
             return email

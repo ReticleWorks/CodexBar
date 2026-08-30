@@ -19,15 +19,32 @@ extension StatusItemController {
                 continue
             }
             guard let view = item.view, view is any MenuCardMeasuring else { continue }
-            guard abs(view.frame.width - width) > 0.5 else { continue }
-            let id = item.representedObject as? String ?? "menuCard"
-            let scope = self.menuProvider(for: menu)?.rawValue ?? id
-            let height = self.cachedMenuCardHeight(for: id, scope: scope, width: width) {
-                self.menuCardHeight(for: view, width: width)
+            if abs(view.frame.width - width) > 0.5 {
+                let id = item.representedObject as? String ?? "menuCard"
+                let scope = self.menuProvider(for: menu)?.rawValue ?? id
+                let height = self.cachedMenuCardHeight(for: id, scope: scope, width: width) {
+                    self.menuCardHeight(for: view, width: width)
+                }
+                view.frame = NSRect(
+                    origin: .zero,
+                    size: NSSize(width: width, height: height))
             }
-            view.frame = NSRect(
-                origin: .zero,
-                size: NSSize(width: width, height: height))
+            // NSMenu can widen a tracked menu after a native row is added. Updating
+            // the outer container frame does not reliably schedule its `layout()`;
+            // force that pass so the inner SwiftUI host does not remain one point tall.
+            view.needsLayout = true
+            view.layoutSubtreeIfNeeded()
+            view.invalidateIntrinsicContentSize()
+            if let customWrapper = view.superview?.superview,
+               abs(customWrapper.frame.height - view.frame.height) > 0.5,
+               item.menu === menu
+            {
+                // A cached tab swap can leave AppKit's private custom-item wrapper
+                // at the outgoing row height. Reassigning the same public item view
+                // makes NSMenu rebuild that wrapper from the current intrinsic size.
+                item.view = nil
+                item.view = view
+            }
         }
     }
 
@@ -90,6 +107,8 @@ extension StatusItemController {
             self.menuCardHeight(for: hosting, width: width)
         }
         hosting.frame = NSRect(origin: .zero, size: NSSize(width: width, height: height))
+        hosting.needsLayout = true
+        hosting.layoutSubtreeIfNeeded()
         return self.makeMenuCardNSMenuItem(
             hosting: hosting,
             id: id,

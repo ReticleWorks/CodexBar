@@ -1361,7 +1361,9 @@ final class CodexAccountSwitcherView: NSView {
         self.selectedBackground = accentColor.cgColor
         self.selectedTextColor = Self.contrastingTextColor(for: accentColor)
         self.selectedAccountID = selectedAccountID ?? accounts.first?.id ?? ""
-        let useTwoRows = accounts.count > 3
+        // Three full account aliases do not fit legibly in the standard menu width.
+        // Claude uses this same two-row selector through its adapter below.
+        let useTwoRows = accounts.count > 2
         let rows = useTwoRows ? 2 : 1
         let height = self.rowHeight * CGFloat(rows) + (useTwoRows ? self.rowSpacing : 0)
         self.preferredSize = NSSize(width: width, height: height)

@@ -1520,19 +1520,21 @@ extension UsageStore {
 
     nonisolated static func isPreservableNetworkTransportError(_ error: Error) -> Bool {
         let nsError = error as NSError
-        guard nsError.domain == NSURLErrorDomain else { return false }
-        switch nsError.code {
-        case NSURLErrorTimedOut,
-             NSURLErrorCancelled,
-             NSURLErrorNetworkConnectionLost,
-             NSURLErrorNotConnectedToInternet,
-             NSURLErrorCannotFindHost,
-             NSURLErrorCannotConnectToHost,
-             NSURLErrorDNSLookupFailed:
-            return true
-        default:
-            return false
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorTimedOut,
+                 NSURLErrorCancelled,
+                 NSURLErrorNetworkConnectionLost,
+                 NSURLErrorNotConnectedToInternet,
+                 NSURLErrorCannotFindHost,
+                 NSURLErrorCannotConnectToHost,
+                 NSURLErrorDNSLookupFailed:
+                return true
+            default:
+                break
+            }
         }
+        return self.isWrappedNetworkTransportError(error)
     }
 
     static func startupConnectivityRetryDelay(forAttempt attempt: Int) -> TimeInterval? {
@@ -1561,8 +1563,13 @@ extension UsageStore {
             }
         }
 
+        return self.isWrappedNetworkTransportError(error)
+    }
+
+    private nonisolated static func isWrappedNetworkTransportError(_ error: Error) -> Bool {
         let message = error.localizedDescription.lowercased()
-        return message.contains("timed out") ||
+        return (message.contains("nsurlerrordomain") && message.contains("-1001")) ||
+            message.contains("timed out") ||
             message.contains("timeout") ||
             message.contains("network connection was lost") ||
             message.contains("not connected to the internet") ||

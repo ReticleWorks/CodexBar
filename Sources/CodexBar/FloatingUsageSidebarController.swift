@@ -84,6 +84,7 @@ final class FloatingUsageSidebarController {
     private nonisolated static let originKey = "LocalSpendTrackerFloatingPillOrigin"
 
     private let settings: SettingsStore
+    private let store: UsageStore
     private let panel: NSPanel
     private let hostingController: NSHostingController<FloatingUsagePillView>
     private var isObserving = false
@@ -100,6 +101,7 @@ final class FloatingUsageSidebarController {
         settings: SettingsStore,
         openProvider: @escaping @MainActor (UsageProvider) -> Void)
     {
+        self.store = store
         self.settings = settings
         self.panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 60, height: 200),
@@ -135,6 +137,85 @@ final class FloatingUsageSidebarController {
         self.observePointer()
         self.observeVisibility()
         self.applyVisibility()
+        self.runVisualProbeIfRequested()
+        self.runStoreProbeIfRequested()
+    }
+
+    /// Records a short, redacted startup timeline for live acceptance checks.
+    /// Ordinary launches do no work because the environment variable is absent.
+    private func runStoreProbeIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["CODEXBAR_STORE_PROBE_PATH"],
+              !path.isEmpty else { return }
+        if let rawProvider = ProcessInfo.processInfo.environment["CODEXBAR_STORE_PROBE_REFRESH_PROVIDER"],
+           let provider = UsageProvider(rawValue: rawProvider)
+        {
+            let delay = max(0, ProcessInfo.processInfo.environment[
+                "CODEXBAR_STORE_PROBE_REFRESH_DELAY_SECONDS"].flatMap(Double.init) ?? 8)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(delay))
+                await self?.store.refreshProvider(provider)
+            }
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
+            var rows: [[String: Any]] = []
+            for delay in [0.0, 1.0, 5.0, 10.0, 20.0] {
+                let elapsed = Date().timeIntervalSince(startedAt)
+                if delay > elapsed {
+                    try? await Task.sleep(for: .seconds(delay - elapsed))
+                }
+                let displayProviders = self.store.enabledFirstPartyProvidersForDisplay()
+                rows.append([
+                    "elapsedSeconds": Date().timeIntervalSince(startedAt),
+                    "displayProviders": displayProviders.map(\.rawValue),
+                    "backgroundProviders": self.store.enabledFirstPartyProvidersForBackgroundWork().map(\.rawValue),
+                    "refreshingProviders": self.store.refreshingProviders.map(\.rawValue).sorted(),
+                    "snapshots": displayProviders.filter {
+                        self.store.presentationSnapshot(for: $0) != nil
+                    }.map(\.rawValue),
+                    "updatedAt": Dictionary(uniqueKeysWithValues: displayProviders.compactMap { provider in
+                        self.store.presentationSnapshot(for: provider).map {
+                            (provider.rawValue, $0.updatedAt.timeIntervalSince1970)
+                        }
+                    }),
+                    "errors": Dictionary(uniqueKeysWithValues: displayProviders.compactMap { provider in
+                        self.store.errors[provider.instanceID].map { (provider.rawValue, $0) }
+                    }),
+                ])
+                guard JSONSerialization.isValidJSONObject(rows),
+                      let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted])
+                else { continue }
+                try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            }
+        }
+    }
+
+    /// Renders one real, populated sidebar frame without Screen Recording access.
+    /// This path is inert during ordinary launches.
+    private func runVisualProbeIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["CODEXBAR_SIDEBAR_PROBE_PATH"],
+              !path.isEmpty else { return }
+        let requestedDelay = ProcessInfo.processInfo.environment["CODEXBAR_SIDEBAR_PROBE_DELAY_SECONDS"]
+            .flatMap(Double.init)
+        let startDelay = max(0, requestedDelay ?? 4)
+        DispatchQueue.main.asyncAfter(deadline: .now() + startDelay) { [weak self] in
+            guard let self, let screen = NSScreen.main else { return }
+            self.reveal(on: screen)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self else { return }
+                let view = self.hostingController.view
+                view.layoutSubtreeIfNeeded()
+                guard view.bounds.width > 0,
+                      view.bounds.height > 0,
+                      let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+                else { return }
+                view.cacheDisplay(in: view.bounds, to: representation)
+                guard let data = representation.representation(using: .png, properties: [:]) else { return }
+                try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+                self.conceal(animated: false)
+            }
+        }
     }
 
     func stop() {
