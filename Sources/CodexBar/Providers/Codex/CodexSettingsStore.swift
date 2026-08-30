@@ -97,6 +97,10 @@ extension SettingsStore {
             self.configSnapshot.providerConfig(for: .codex)?.codexProfileHomePaths)
     }
 
+    var codexDisplayAliases: [String: String] {
+        self.configSnapshot.providerConfig(for: .codex)?.codexDisplayAliases ?? [:]
+    }
+
     func profileCodexHomePath(forActiveSource source: CodexActiveSource) -> String? {
         guard case let .profileHome(path) = source else {
             return nil

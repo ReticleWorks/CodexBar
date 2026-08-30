@@ -82,6 +82,7 @@ extension UsageStore {
             let list = try await ClaudeSwapAccountReader.readAccountList(executablePath: executablePath)
             let snapshots = ClaudeSwapAccountProjection.accountSnapshots(
                 from: list,
+                displayAliases: self.settings.claudeSwapDisplayAliases,
                 previousAccounts: ClaudeSwapRetainedUsageStore.previousAccounts(
                     inMemory: self.claudeSwapAccountSnapshots))
             guard self.isCurrentClaudeSwapRefresh(executablePath: executablePath, generation: generation) else {

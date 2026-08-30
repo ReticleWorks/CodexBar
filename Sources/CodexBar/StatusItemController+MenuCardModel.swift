@@ -126,7 +126,9 @@ extension StatusItemController {
                 ?? codexProjection?.userFacingErrors.usage
                 ?? (surface == .liveCard ? self.store.userFacingError(for: target) : nil),
             limitsAvailability: self.store.knownLimitsAvailability(for: target),
-            usageBarsShowUsed: self.settings.usageBarsShowUsed,
+            usageBarsShowUsed: ProviderUsageDisplayPolicy.showsUsed(
+                for: target,
+                defaultShowUsed: self.settings.usageBarsShowUsed),
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
             tokenCostIsRefreshing: self.store.tokenCostRefreshIsActive(for: target),
@@ -273,7 +275,8 @@ extension StatusItemController {
     }
 
     func accountInfo(for account: CodexVisibleAccount) -> AccountInfo {
-        AccountInfo(email: account.email, plan: account.workspaceLabel)
+        let alias = self.settings.codexDisplayAliases[account.email.lowercased()]
+        return AccountInfo(email: alias ?? account.email, plan: alias == nil ? account.workspaceLabel : nil)
     }
 
     private func quotaWarningMarkerThresholds(provider: UsageProvider, window: QuotaWarningWindow) -> [Int] {

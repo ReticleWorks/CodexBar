@@ -922,6 +922,14 @@ extension SettingsStore {
         }
     }
 
+    var floatingSidebarEnabled: Bool {
+        get { self.defaultsState.floatingSidebarEnabled }
+        set {
+            self.defaultsState.floatingSidebarEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "floatingSidebarEnabled")
+        }
+    }
+
     var switcherShowsIcons: Bool {
         get { self.defaultsState.switcherShowsIcons }
         set {

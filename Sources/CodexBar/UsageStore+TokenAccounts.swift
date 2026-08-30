@@ -173,7 +173,9 @@ extension UsageStore {
     func shouldFetchAllTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) -> Bool {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return false }
         guard self.settings.effectiveSelectedTokenAccount(for: provider) != nil else { return false }
-        return self.settings.multiAccountMenuLayout == .stacked && accounts.count > 1
+        // Selectors and provider-specific API sections both render cached rows for every configured
+        // account. Hydrate them regardless of the card layout.
+        return accounts.count > 1
     }
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
@@ -181,7 +183,9 @@ extension UsageStore {
         // every row and then reject its whoami identity against other accounts.
         guard !self.shouldUseAmbientCodexPATForUsage() else { return false }
         let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
-        return self.settings.multiAccountMenuLayout == .stacked && projection.visibleAccounts.count > 1
+        // The segmented selector needs every visible row hydrated too; otherwise inactive
+        // accounts remain stuck at "Not fetched yet."
+        return projection.visibleAccounts.count > 1
     }
 
     func shouldUseAmbientCodexPATForUsage() -> Bool {

@@ -16,6 +16,11 @@ extension ProviderConfig {
         set { self.setExtensionValue(newValue, forKey: "claudeSwapExecutablePath") }
     }
 
+    public var claudeSwapDisplayAliases: [String: String]? {
+        get { self.extensionValue(forKey: "claudeSwapDisplayAliases") }
+        set { self.setExtensionValue(newValue, forKey: "claudeSwapDisplayAliases") }
+    }
+
     public var sanitizedClaudeSwapExecutablePath: String? {
         Self.clean(self.claudeSwapExecutablePath)
     }

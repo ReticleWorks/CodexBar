@@ -17,6 +17,7 @@ public enum ClaudeSwapAccountProjection {
 
     public static func accountSnapshots(
         from list: ClaudeSwapAccountList,
+        displayAliases: [String: String] = [:],
         previousAccounts: [ProviderAccountUsageSnapshot] = [],
         now: Date = Date()) -> [ProviderAccountUsageSnapshot]
     {
@@ -30,7 +31,13 @@ public enum ClaudeSwapAccountProjection {
             return lhs.number < rhs.number
         }
         let duplicateEmails = self.duplicateEmails(in: ordered)
-        let labels = self.displayLabels(for: ordered, duplicateEmails: duplicateEmails)
+        let normalizedAliases = Dictionary(
+            displayAliases.map { (self.normalizedEmail($0.key), $0.value) },
+            uniquingKeysWith: { _, last in last })
+        let labels = self.displayLabels(
+            for: ordered,
+            duplicateEmails: duplicateEmails,
+            displayAliases: normalizedAliases)
         return zip(ordered, labels).map { row, label in
             let id = ProviderAccountIdentity(source: self.sourceName, opaqueID: String(row.number))
             let snapshot = self.usageSnapshot(
@@ -60,7 +67,17 @@ public enum ClaudeSwapAccountProjection {
             ?? adapterError.map { "Showing the last successful update: \($0)" }
     }
 
-    static func displayLabel(for row: ClaudeSwapAccountRow, duplicateEmails: Set<String> = []) -> String {
+    static func displayLabel(
+        for row: ClaudeSwapAccountRow,
+        duplicateEmails: Set<String> = [],
+        displayAliases: [String: String] = [:]) -> String
+    {
+        if let configured = displayAliases[self.normalizedEmail(row.email)]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !configured.isEmpty
+        {
+            return configured
+        }
         if let alias = self.alias(from: row) {
             return alias
         }
@@ -76,16 +93,24 @@ public enum ClaudeSwapAccountProjection {
         return "\(row.email) · Account \(row.number)"
     }
 
-    private static func displayLabels(for rows: [ClaudeSwapAccountRow], duplicateEmails: Set<String>) -> [String] {
-        let candidates = rows.map { self.displayLabel(for: $0, duplicateEmails: duplicateEmails) }
+    private static func displayLabels(
+        for rows: [ClaudeSwapAccountRow],
+        duplicateEmails: Set<String>,
+        displayAliases: [String: String]) -> [String]
+    {
+        let candidates = rows.map {
+            self.displayLabel(for: $0, duplicateEmails: duplicateEmails, displayAliases: displayAliases)
+        }
         var collisionCounts: [String: Int] = [:]
         for (row, label) in zip(rows, candidates) {
-            guard duplicateEmails.contains(self.normalizedEmail(row.email)),
+            guard displayAliases[self.normalizedEmail(row.email)] == nil,
+                  duplicateEmails.contains(self.normalizedEmail(row.email)),
                   self.alias(from: row) == nil else { continue }
             collisionCounts[label.lowercased(), default: 0] += 1
         }
         return zip(rows, candidates).map { row, label in
-            guard duplicateEmails.contains(self.normalizedEmail(row.email)),
+            guard displayAliases[self.normalizedEmail(row.email)] == nil,
+                  duplicateEmails.contains(self.normalizedEmail(row.email)),
                   self.alias(from: row) == nil,
                   collisionCounts[label.lowercased(), default: 0] > 1
             else {

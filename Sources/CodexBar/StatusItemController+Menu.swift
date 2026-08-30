@@ -1063,8 +1063,10 @@ extension StatusItemController {
     {
         let view = CodexAccountSwitcherView(
             accounts: display.accounts,
+            displayAliases: self.settings.codexDisplayAliases,
             selectedAccountID: display.activeVisibleAccountID,
             width: width,
+            accentColor: Self.accountSwitcherAccentColor(for: .codex),
             onSelect: { [weak self, weak menu] account in
                 guard let self else { return }
                 self.handleCodexVisibleAccountSelection(account, menu: menu)
@@ -1074,6 +1076,11 @@ extension StatusItemController {
         item.view = view
         item.isEnabled = false
         return item
+    }
+
+    static func accountSwitcherAccentColor(for provider: UsageProvider) -> NSColor {
+        let color = ProviderAccentPalette.color(for: provider)
+        return NSColor(deviceRed: color.red, green: color.green, blue: color.blue, alpha: 1)
     }
 
     @discardableResult

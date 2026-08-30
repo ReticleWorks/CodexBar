@@ -1325,6 +1325,9 @@ final class TokenAccountSwitcherView: NSView {
 
 final class CodexAccountSwitcherView: NSView {
     private let accounts: [CodexVisibleAccount]
+    private let displayAliases: [String: String]
+    private let selectableAccountIDs: Set<String>?
+    private let accountToolTips: [String: String]
     private let onSelect: (CodexVisibleAccount) -> Void
     private var selectedAccountID: String
     private var pressedAccountID: String?
@@ -1332,9 +1335,9 @@ final class CodexAccountSwitcherView: NSView {
     private let preferredSize: NSSize
     private let rowSpacing: CGFloat = 4
     private let rowHeight: CGFloat = 26
-    private let selectedBackground = NSColor.controlAccentColor.cgColor
+    private let selectedBackground: CGColor
     private let unselectedBackground = NSColor.clear.cgColor
-    private let selectedTextColor = NSColor.white
+    private let selectedTextColor: NSColor
     private let unselectedTextColor = NSColor.secondaryLabelColor
     private let buttonFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
     private let buttonHorizontalPadding: CGFloat = 14
@@ -1342,12 +1345,21 @@ final class CodexAccountSwitcherView: NSView {
 
     init(
         accounts: [CodexVisibleAccount],
+        displayAliases: [String: String] = [:],
         selectedAccountID: String?,
         width: CGFloat,
+        accentColor: NSColor = .controlAccentColor,
+        selectableAccountIDs: Set<String>? = nil,
+        accountToolTips: [String: String] = [:],
         onSelect: @escaping (CodexVisibleAccount) -> Void)
     {
         self.accounts = accounts
+        self.displayAliases = displayAliases
+        self.selectableAccountIDs = selectableAccountIDs
+        self.accountToolTips = accountToolTips
         self.onSelect = onSelect
+        self.selectedBackground = accentColor.cgColor
+        self.selectedTextColor = Self.contrastingTextColor(for: accentColor)
         self.selectedAccountID = selectedAccountID ?? accounts.first?.id ?? ""
         let useTwoRows = accounts.count > 3
         let rows = useTwoRows ? 2 : 1
@@ -1402,7 +1414,8 @@ final class CodexAccountSwitcherView: NSView {
                     target: self,
                     action: #selector(self.handleSelect))
                 button.identifier = NSUserInterfaceItemIdentifier(account.id)
-                button.toolTip = account.menuDisplayName
+                button.toolTip = self.accountToolTips[account.id] ?? self.displayName(for: account)
+                button.isEnabled = self.selectableAccountIDs?.contains(account.id) ?? true
                 button.isBordered = false
                 button.setButtonType(.toggle)
                 button.controlSize = .small
@@ -1439,8 +1452,12 @@ final class CodexAccountSwitcherView: NSView {
 
     private func compactButtonTitle(for account: CodexVisibleAccount, buttonWidth: CGFloat) -> String {
         let availableTextWidth = max(24, buttonWidth - self.buttonHorizontalPadding)
-        if self.textWidth(account.menuDisplayName) <= availableTextWidth {
-            return account.menuDisplayName
+        let displayName = self.displayName(for: account)
+        if self.textWidth(displayName) <= availableTextWidth {
+            return displayName
+        }
+        if self.displayAliases[account.email.lowercased()] != nil {
+            return self.truncateMiddle(displayName, toFit: availableTextWidth)
         }
 
         guard let workspace = account.menuWorkspaceLabel else {
@@ -1482,6 +1499,16 @@ final class CodexAccountSwitcherView: NSView {
         }
 
         return title
+    }
+
+    private func displayName(for account: CodexVisibleAccount) -> String {
+        self.displayAliases[account.email.lowercased()] ?? account.menuDisplayName
+    }
+
+    private static func contrastingTextColor(for background: NSColor) -> NSColor {
+        guard let rgb = background.usingColorSpace(.deviceRGB) else { return .white }
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.62 ? NSColor(deviceWhite: 0.08, alpha: 1) : .white
     }
 
     private func truncateTail(_ text: String, toFit width: CGFloat) -> String {
@@ -1613,6 +1640,7 @@ final class CodexAccountSwitcherView: NSView {
     }
 
     private func applySelection(_ account: CodexVisibleAccount) {
+        guard self.selectableAccountIDs?.contains(account.id) ?? true else { return }
         self.selectedAccountID = account.id
         self.updateButtonStyles()
         self.onSelect(account)
@@ -1682,4 +1710,74 @@ final class CodexAccountSwitcherView: NSView {
         return self.toolTip
     }
     #endif
+}
+
+/// Claude uses the Codex selector itself through a provider-neutral adapter. This keeps one
+/// implementation of the interaction, sizing, truncation, hover, and two-row behavior.
+final class ClaudeSwapAccountSwitcherView: NSView {
+    private let switcher: CodexAccountSwitcherView
+
+    init(
+        accounts: [ProviderAccountUsageSnapshot],
+        selectedAccountID: ProviderAccountIdentity?,
+        width: CGFloat,
+        onSelect: @escaping (ProviderAccountUsageSnapshot) -> Void)
+    {
+        let mapped = accounts.map { account in
+            CodexVisibleAccount(
+                id: Self.identifier(for: account.id),
+                email: account.displayLabel,
+                storedAccountID: nil,
+                selectionSource: .liveSystem,
+                isActive: account.isActive,
+                isLive: account.isActive,
+                canReauthenticate: false,
+                canRemove: false)
+        }
+        let selectableIDs = Set(accounts.filter { $0.isActive || $0.canActivate }.map { Self.identifier(for: $0.id) })
+        let toolTips = Dictionary(uniqueKeysWithValues: accounts.map { account in
+            let message = account.error?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = message.map { "\(account.displayLabel) — \($0)" } ?? account.displayLabel
+            return (Self.identifier(for: account.id), text)
+        })
+        self.switcher = CodexAccountSwitcherView(
+            accounts: mapped,
+            selectedAccountID: selectedAccountID.map(Self.identifier(for:)),
+            width: width,
+            accentColor: StatusItemController.accountSwitcherAccentColor(for: .claude),
+            selectableAccountIDs: selectableIDs,
+            accountToolTips: toolTips,
+            onSelect: { selected in
+                guard let account = accounts.first(where: { Self.identifier(for: $0.id) == selected.id }) else {
+                    return
+                }
+                onSelect(account)
+            })
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: self.switcher.fittingSize.height))
+        self.switcher.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(self.switcher)
+        NSLayoutConstraint.activate([
+            self.switcher.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            self.switcher.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            self.switcher.topAnchor.constraint(equalTo: self.topAnchor),
+            self.switcher.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        self.switcher.intrinsicContentSize
+    }
+
+    override var fittingSize: NSSize {
+        self.switcher.fittingSize
+    }
+
+    private static func identifier(for id: ProviderAccountIdentity) -> String {
+        "\(id.source):\(id.opaqueID)"
+    }
 }

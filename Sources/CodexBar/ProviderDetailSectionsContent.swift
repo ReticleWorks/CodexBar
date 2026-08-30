@@ -57,6 +57,7 @@ private struct ProviderDetailChartContent: View {
     let chart: ProviderDetailSection.Chart
     let color: Color
     @Environment(\.menuItemHighlighted) private var isHighlighted
+    @State private var hoveredPointIndex: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -76,6 +77,17 @@ private struct ProviderDetailChartContent: View {
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                 .lineLimit(1)
             }
+            if let point = self.hoveredPoint {
+                HStack(spacing: 6) {
+                    Text(point.label)
+                    Spacer(minLength: 0)
+                    Text(self.valueLabel(point.value))
+                        .monospacedDigit()
+                }
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                .lineLimit(1)
+            }
             Group {
                 switch self.chart.kind {
                 case .bars:
@@ -87,6 +99,18 @@ private struct ProviderDetailChartContent: View {
             .frame(height: 58)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(self.accessibilityLabel)
+            if let first = self.chart.points.first, let last = self.chart.points.last {
+                HStack(spacing: 6) {
+                    Text(first.label)
+                    Spacer(minLength: 0)
+                    if first.label != last.label {
+                        Text(last.label)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                .lineLimit(1)
+            }
         }
     }
 
@@ -94,11 +118,29 @@ private struct ProviderDetailChartContent: View {
         GeometryReader { geometry in
             let scale = UsageChartScale(values: self.chart.points.map(\.value))
             HStack(alignment: .bottom, spacing: 2) {
-                ForEach(Array(self.chart.points.enumerated()), id: \.offset) { _, point in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(self.fillColor(value: point.value, scale: scale))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: Self.height(value: point.value, scale: scale, available: geometry.size.height))
+                ForEach(Array(self.chart.points.enumerated()), id: \.offset) { index, point in
+                    ZStack(alignment: .bottom) {
+                        Color.clear
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(self.fillColor(value: point.value, scale: scale))
+                            .frame(height: Self.height(
+                                value: point.value,
+                                scale: scale,
+                                available: geometry.size.height))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active:
+                            self.hoveredPointIndex = index
+                        case .ended:
+                            if self.hoveredPointIndex == index {
+                                self.hoveredPointIndex = nil
+                            }
+                        }
+                    }
+                    .help("\(point.label) · \(self.valueLabel(point.value))")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -111,7 +153,7 @@ private struct ProviderDetailChartContent: View {
     }
 
     private var line: some View {
-        GeometryReader { _ in
+        GeometryReader { geometry in
             Canvas { context, size in
                 let scale = UsageChartScale(values: self.chart.points.map(\.value))
                 let points = self.chart.points.enumerated().map { index, point in
@@ -142,7 +184,30 @@ private struct ProviderDetailChartContent: View {
                     .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.22))
                     .frame(height: 1)
             }
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case let .active(location):
+                    guard !self.chart.points.isEmpty, geometry.size.width > 0 else { return }
+                    let fraction = min(1, max(0, location.x / geometry.size.width))
+                    self.hoveredPointIndex = Int(
+                        (fraction * CGFloat(self.chart.points.count - 1)).rounded())
+                case .ended:
+                    self.hoveredPointIndex = nil
+                }
+            }
         }
+    }
+
+    private var hoveredPoint: ProviderDetailSection.Chart.Point? {
+        guard let hoveredPointIndex, self.chart.points.indices.contains(hoveredPointIndex) else { return nil }
+        return self.chart.points[hoveredPointIndex]
+    }
+
+    private func valueLabel(_ value: Double) -> String {
+        let formatted = value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 2)))
+        guard let unit = self.chart.unit, !unit.isEmpty else { return formatted }
+        return "\(formatted) \(unit)"
     }
 
     private var accessibilityLabel: String {

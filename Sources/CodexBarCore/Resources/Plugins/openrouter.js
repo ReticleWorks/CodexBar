@@ -61,7 +61,7 @@ defineProvider({
     const optionalRequestTimeoutSeconds =
       typeof injectedOptionalTimeout === "number" && Number.isFinite(injectedOptionalTimeout)
         ? injectedOptionalTimeout
-        : 1;
+        : 15;
     function degradationReason(error) {
       const message = error && typeof error.message === "string" ? error.message : String(error);
       if (/timed out|-1001/i.test(message)) return "Request timed out";
@@ -118,16 +118,19 @@ defineProvider({
         const cutoff = cutoffDate.toISOString().slice(0, 10);
         // A management credential must never follow the user-configurable API base to a proxy.
         const activityURL = "https://openrouter.ai/api/v1/activity";
-        const [historyResponse, latestCompletedResponse] = await Promise.all([
-          ctx.http.get(activityURL, {
+        // QuickJS bridges native HTTP promises through one runtime queue. Starting both requests
+        // together can leave one continuation waiting until its timeout even when OpenRouter is fast.
+        const historyResponse = await ctx.http.get(activityURL, {
+          timeoutSeconds: optionalRequestTimeoutSeconds,
+          openRouterManagementAuth: true,
+        });
+        const latestCompletedResponse = await ctx.http.get(
+          `${activityURL}?date=${encodeURIComponent(latestCompleted)}`,
+          {
             timeoutSeconds: optionalRequestTimeoutSeconds,
             openRouterManagementAuth: true,
-          }),
-          ctx.http.get(`${activityURL}?date=${encodeURIComponent(latestCompleted)}`, {
-            timeoutSeconds: optionalRequestTimeoutSeconds,
-            openRouterManagementAuth: true,
-          }),
-        ]);
+          },
+        );
         if (historyResponse.status !== 200 || latestCompletedResponse.status !== 200) {
           const failed = historyResponse.status !== 200 ? historyResponse : latestCompletedResponse;
           activityDegradation = activityDegradationReason(failed.status);
@@ -186,9 +189,8 @@ defineProvider({
                 throw new TypeError(`activity.data[${index}].${field} must be a nonnegative safe integer`);
               }
             }
-            if (reasoningTokens !== null && reasoningTokens > outputTokens) {
-              throw new TypeError(`activity.data[${index}].reasoning_tokens must not exceed completion_tokens`);
-            }
+            // OpenRouter may report reasoning as a separate counter rather than a strict subset
+            // of completion tokens. Both counters remain authoritative for a valid spend row.
             if (meteredCost < 0 || estimatedCost < 0 || !Number.isFinite(cost)) {
               throw new TypeError(`activity.data[${index}] spend must be finite and nonnegative`);
             }
@@ -344,7 +346,10 @@ defineProvider({
         const requests = keyData.rate_limit.requests;
         const interval = keyData.rate_limit.interval;
         if (Number.isInteger(requests) && typeof interval === "string") {
-          rows.push({ label: "Rate limit", value: `${requests} requests / ${interval}` });
+          rows.push({
+            label: "Rate limit",
+            value: requests < 0 ? "Unlimited" : `${requests} requests / ${interval}`,
+          });
         }
       }
       const section = { title: "API key", rows };
@@ -380,6 +385,13 @@ defineProvider({
 
     const result = {
       identity: { loginMethod: `Balance: ${currency(balance)}` },
+      cost: {
+        used: totalUsage,
+        limit: totalCredits,
+        balance,
+        currency: "USD",
+        period: "All time",
+      },
       details,
     };
     if (costUsage) result.costUsage = costUsage;

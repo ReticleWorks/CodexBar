@@ -92,6 +92,10 @@ extension SettingsStore {
                 value: newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "cleared" : "set")
         }
     }
+
+    var claudeSwapDisplayAliases: [String: String] {
+        self.configSnapshot.providerConfig(for: .claude)?.claudeSwapDisplayAliases ?? [:]
+    }
 }
 
 extension SettingsStore {

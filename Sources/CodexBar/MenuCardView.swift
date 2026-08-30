@@ -682,8 +682,20 @@ private struct UsageMenuCardUsageContentView: View {
                 metric: metric,
                 layoutMetric: self.layoutModel.metrics.first { $0.id == metric.id } ?? metric,
                 title: UsageMenuCardView.popupMetricTitle(provider: self.model.provider, metric: metric),
-                progressColor: self.model.progressColor)
+                progressColor: self.progressColor(for: metric))
         }
+    }
+
+    private func progressColor(for metric: UsageMenuCardView.Model.Metric) -> Color {
+        guard self.model.provider == .claude else { return self.model.progressColor }
+        let usedPercent = metric.percentStyle == .used ? metric.percent : 100 - metric.percent
+        if usedPercent >= 95 {
+            return Color(red: 0.84, green: 0.16, blue: 0.13)
+        }
+        if usedPercent >= 80 {
+            return Color(red: 0.95, green: 0.65, blue: 0.08)
+        }
+        return self.model.progressColor
     }
 
     var body: some View {
