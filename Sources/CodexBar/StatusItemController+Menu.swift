@@ -841,6 +841,13 @@ extension StatusItemController {
     {
         let actionableSections = sections.filter { section in section.entries.contains(where: \ .isActionable) }
         for (index, section) in actionableSections.enumerated() {
+            let usesUtilityBar = section.entries.contains { entry in
+                if case .action(_, .settings) = entry { return true }
+                return false
+            } && section.entries.contains { entry in
+                if case .action(_, .quit) = entry { return true }
+                return false
+            }
             for entry in section.entries {
                 switch entry {
                 case let .text(text, style):
@@ -861,6 +868,19 @@ extension StatusItemController {
                     }
                     menu.addItem(item)
                 case let .action(title, action):
+                    if usesUtilityBar {
+                        switch action {
+                        case .refresh:
+                            menu.addItem(self.makeThrottleUtilityBarItem(
+                                menu: captureMenu ?? menu,
+                                width: width))
+                            continue
+                        case .settings, .about, .quit:
+                            continue
+                        default:
+                            break
+                        }
+                    }
                     if action == .refresh {
                         let item = self.makePersistentRefreshItem(
                             title: L(title),
@@ -949,6 +969,34 @@ extension StatusItemController {
                 menu.addItem(.separator())
             }
         }
+    }
+
+    private func makeThrottleUtilityBarItem(menu: NSMenu, width: CGFloat) -> NSMenuItem {
+        let view = NSHostingView(rootView: ThrottleUtilityBarView(
+            width: width,
+            sidebarEnabled: self.settings.floatingSidebarEnabled,
+            refreshEnabled: !self.isRefreshActionInFlight(for: menu),
+            onRefresh: { [weak self, weak menu] in
+                guard let self, let menu else { return }
+                self.refreshMenuProviderNow(in: menu)
+            },
+            onToggleSidebar: { [weak self] in
+                self?.settings.floatingSidebarEnabled.toggle()
+            },
+            onSettings: { [weak self] in
+                self?.showSettingsGeneral()
+            },
+            onQuit: { [weak self] in
+                self?.quit()
+            }))
+        view.frame = NSRect(origin: .zero, size: NSSize(width: width, height: 1))
+        view.layoutSubtreeIfNeeded()
+        view.frame.size.height = ceil(view.fittingSize.height)
+
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.view = view
+        item.isEnabled = true
+        return item
     }
 
     func makeMenu(for provider: UsageProvider?) -> NSMenu {
@@ -1659,5 +1707,75 @@ extension StatusItemController {
 
     @objc func menuCardNoOp(_ sender: NSMenuItem) {
         _ = sender
+    }
+}
+
+@MainActor
+private struct ThrottleUtilityBarView: View {
+    let width: CGFloat
+    @State var sidebarEnabled: Bool
+    let refreshEnabled: Bool
+    let onRefresh: () -> Void
+    let onToggleSidebar: () -> Void
+    let onSettings: () -> Void
+    let onQuit: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Local SpendTracker")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 12)
+
+            self.utilityButton(
+                systemName: "arrow.clockwise",
+                help: "Refresh",
+                enabled: self.refreshEnabled,
+                action: self.onRefresh)
+
+            self.utilityButton(
+                systemName: self.sidebarEnabled ? "pin.fill" : "pin.slash",
+                help: self.sidebarEnabled ? "Hide floating sidebar" : "Show floating sidebar") {
+                    self.sidebarEnabled.toggle()
+                    self.onToggleSidebar()
+                }
+
+            self.utilityButton(systemName: "gearshape", help: "Settings", action: self.onSettings)
+            self.utilityButton(systemName: "power", help: "Quit", action: self.onQuit)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0.055, green: 0.055, blue: 0.06)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.09)))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(width: self.width)
+    }
+
+    private func utilityButton(
+        systemName: String,
+        help: String,
+        enabled: Bool = true,
+        action: @escaping () -> Void) -> some View
+    {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white.opacity(enabled ? 0.7 : 0.3))
+        .disabled(!enabled)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
