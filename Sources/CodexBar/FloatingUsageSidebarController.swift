@@ -99,8 +99,7 @@ final class FloatingUsageSidebarController {
     init(
         store: UsageStore,
         settings: SettingsStore,
-        openProvider: @escaping @MainActor (UsageProvider) -> Void,
-        openSettings: @escaping @MainActor () -> Void)
+        openProvider: @escaping @MainActor (UsageProvider) -> Void)
     {
         self.store = store
         self.settings = settings
@@ -112,8 +111,7 @@ final class FloatingUsageSidebarController {
         self.hostingController = NSHostingController(rootView: FloatingUsagePillView(
             store: store,
             settings: settings,
-            openProvider: openProvider,
-            openSettings: openSettings))
+            openProvider: openProvider))
 
         self.panel.identifier = NSUserInterfaceItemIdentifier("floatingUsageSidebar")
         self.panel.level = .statusBar
@@ -423,7 +421,6 @@ private struct FloatingUsagePillView: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
     let openProvider: @MainActor (UsageProvider) -> Void
-    let openSettings: @MainActor () -> Void
     @State private var selectedProvider: UsageProvider = .claude
 
     var body: some View {
@@ -448,23 +445,6 @@ private struct FloatingUsagePillView: View {
                         self.openProvider(selected)
                     })
             }
-
-            Divider()
-                .overlay(Color.white.opacity(0.09))
-                .padding(.horizontal, 4)
-
-            Button {
-                self.openSettings()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 32, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Settings")
-            .accessibilityLabel("Open Settings")
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 10)
@@ -523,11 +503,7 @@ private struct FloatingUsagePillItem: View {
                     self.providerMark
                 }
                 .frame(width: 40, height: 40)
-                .background {
-                    if self.isSelected {
-                        Circle().fill(self.brandColor.opacity(0.12))
-                    }
-                }
+                .opacity(self.isSelected ? 1 : 0.6)
 
                 if let metric = self.metric {
                     self.valueLabel(metric.compactPercent, direction: metric.directionLabel, available: true)
@@ -549,12 +525,12 @@ private struct FloatingUsagePillItem: View {
     private func valueLabel(_ value: String, direction: String, available: Bool) -> some View {
         VStack(spacing: 0) {
             Text(value)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white.opacity(available ? 0.85 : 0.35))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(direction)
-                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.white.opacity(available ? 0.45 : 0.28))
                 .fixedSize()
         }

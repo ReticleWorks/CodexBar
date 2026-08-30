@@ -445,9 +445,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openProvider: { [weak self] provider in
                 self?.settings?.selectedMenuProvider = provider.instanceID
                 self?.statusController?.openMenuFromShortcut()
-            },
-            openSettings: { [weak self] in
-                self?.openSettings(pane: nil)
             })
     }
 
