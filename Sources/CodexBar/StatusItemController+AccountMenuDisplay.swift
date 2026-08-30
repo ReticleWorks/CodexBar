@@ -135,7 +135,10 @@ extension StatusItemController {
 
             switch result {
             case .updated:
-                self.invalidateMenus(refreshOpenMenus: false)
+                self.invalidateMenus(
+                    refreshOpenMenus: !self.openMenus.isEmpty,
+                    deferOpenParentMenuRebuild: true,
+                    allowStaleContentDuringDataRefresh: true)
             case .discarded, .skipped, .unchanged:
                 break
             }

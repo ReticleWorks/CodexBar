@@ -6,6 +6,7 @@ import Security
 public enum AppGroupSupport {
     public static let defaultTeamID = "Y5PE65HELJ"
     public static let teamIDInfoKey = "CodexBarTeamID"
+    public static let disableAppGroupInfoKey = "CodexBarDisableAppGroup"
     public static let legacyReleaseGroupID = "group.com.steipete.codexbar"
     public static let legacyDebugGroupID = "group.com.steipete.codexbar.debug"
     public static let widgetSnapshotFilename = "widget-snapshot.json"
@@ -84,7 +85,10 @@ public enum AppGroupSupport {
         -> URL?
     {
         #if os(macOS)
-        fileManager.containerURL(forSecurityApplicationGroupIdentifier: self.currentGroupID(for: bundleID))
+        guard Bundle.main.object(forInfoDictionaryKey: self.disableAppGroupInfoKey) as? Bool != true else {
+            return nil
+        }
+        return fileManager.containerURL(forSecurityApplicationGroupIdentifier: self.currentGroupID(for: bundleID))
         #else
         nil
         #endif

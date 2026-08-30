@@ -826,4 +826,30 @@ struct ClaudeSwapAccountProjectionTests {
         #expect(ClaudeSwapRetainedUsageStore.previousAccounts(inMemory: previous).count == previous.count)
         #expect(ClaudeSwapRetainedUsageStore.previousAccounts(inMemory: []).isEmpty)
     }
+
+    @Test
+    func `retained accounts restore configured labels and active state without persisted labels`() throws {
+        let previous = ClaudeSwapAccountProjection.accountSnapshots(
+            from: ClaudeSwapAccountList(
+                activeAccountNumber: 1,
+                accounts: [
+                    ClaudeSwapAccountRow(
+                        number: 1,
+                        email: "work@example.com",
+                        isActive: true,
+                        usageStatus: .ok,
+                        fiveHour: ClaudeSwapUsageWindow(usedPercent: 40, resetsAt: nil),
+                        sevenDay: nil),
+                ]),
+            now: self.now)
+        let retained = ClaudeSwapRetainedUsageStore.snapshotsForRetention(previous)
+        let restored = try #require(ClaudeSwapRetainedUsageStore.accountsForDisplay(
+            retained,
+            displayAliases: ["work@example.com": "work"]).first)
+
+        #expect(restored.displayLabel == "work")
+        #expect(restored.accountEmail == "work@example.com")
+        #expect(restored.isActive)
+        #expect(restored.snapshot?.primary?.usedPercent == 40)
+    }
 }

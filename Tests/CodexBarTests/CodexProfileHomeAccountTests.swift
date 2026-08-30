@@ -20,6 +20,34 @@ struct CodexProfileHomeAccountTests {
     }
 
     @Test
+    func `configured profile replaces the matching ambient account`() throws {
+        let live = ObservedSystemCodexAccount(
+            email: "user@example.com",
+            workspaceAccountID: "account-user",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date())
+        let profile = ObservedSystemCodexAccount(
+            email: "USER@example.com",
+            workspaceAccountID: "account-user",
+            codexHomePath: "/Users/test/.codex-user",
+            observedAt: Date())
+        let projection = CodexVisibleAccountProjection.make(from: CodexAccountReconciliationSnapshot(
+            storedAccounts: [],
+            activeStoredAccount: nil,
+            liveSystemAccount: live,
+            profileHomeAccounts: [profile],
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .liveSystem,
+            hasUnreadableAddedAccountStore: false))
+        let account = try #require(projection.visibleAccounts.first)
+
+        #expect(projection.visibleAccounts.count == 1)
+        #expect(account.selectionSource == .profileHome(path: "/Users/test/.codex-user"))
+        #expect(account.isLive)
+        #expect(account.isActive)
+    }
+
+    @Test
     @MainActor
     func `settings store discovers configured codex profile homes`() throws {
         let suite = "CodexProfileHomeAccountTests-discovery"

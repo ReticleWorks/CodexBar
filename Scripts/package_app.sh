@@ -4,9 +4,9 @@ set -euo pipefail
 resolve_package_signing_mode() {
   local requested="${CODEXBAR_SIGNING:-adhoc}"
   case "$requested" in
-    adhoc|identity) ;;
+    adhoc|identity|local-identity) ;;
     *)
-      echo "ERROR: Unsupported CODEXBAR_SIGNING: $requested (expected adhoc or identity)" >&2
+      echo "ERROR: Unsupported CODEXBAR_SIGNING: $requested (expected adhoc, identity, or local-identity)" >&2
       return 1
       ;;
   esac
@@ -224,7 +224,7 @@ if [[ "$LOWER_CONF" == "debug" ]]; then
   FEED_URL=""
   AUTO_CHECKS=false
 fi
-if [[ "$SIGNING_MODE" == "adhoc" ]]; then
+if [[ "$SIGNING_MODE" == "adhoc" || "$SIGNING_MODE" == "local-identity" ]]; then
   FEED_URL=""
   AUTO_CHECKS=false
 fi
@@ -325,6 +325,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CodexBuildTimestamp</key><string>${BUILD_TIMESTAMP}</string>
     <key>CodexGitCommit</key><string>${GIT_COMMIT}</string>
     <key>CodexBarTeamID</key><string>${APP_TEAM_ID}</string>
+    $(if [[ "$SIGNING_MODE" == "local-identity" ]]; then echo "    <key>CodexBarDisableAppGroup</key><true/>"; fi)
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
@@ -526,6 +527,13 @@ SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 if [[ "$SIGNING_MODE" == "adhoc" ]]; then
   CODESIGN_ID="-"
   CODESIGN_ARGS=(--force --sign "$CODESIGN_ID")
+elif [[ "$SIGNING_MODE" == "local-identity" ]]; then
+  if [[ -z "${APP_IDENTITY:-}" ]]; then
+    echo "ERROR: APP_IDENTITY is required for CODEXBAR_SIGNING=local-identity" >&2
+    exit 1
+  fi
+  CODESIGN_ID="$APP_IDENTITY"
+  CODESIGN_ARGS=(--force --timestamp=none --sign "$CODESIGN_ID")
 elif [[ "$ALLOW_LLDB" == "1" ]]; then
   CODESIGN_ID="-"
   CODESIGN_ARGS=(--force --sign "$CODESIGN_ID")
@@ -615,10 +623,15 @@ if [[ "$EMBED_PROVISIONING_PROFILE" == "1" ]]; then
   cp "$PROVISIONING_PROFILE_SOURCE" "$APP/Contents/embedded.provisionprofile"
 fi
 
-# Finally sign the app bundle itself
-codesign "${CODESIGN_ARGS[@]}" \
-  --entitlements "$APP_ENTITLEMENTS" \
-  "$APP"
+# Finally sign the app bundle itself. A host-local identity has no Apple team,
+# so it must not carry restricted Developer ID entitlements.
+if [[ "$SIGNING_MODE" == "local-identity" ]]; then
+  codesign "${CODESIGN_ARGS[@]}" "$APP"
+else
+  codesign "${CODESIGN_ARGS[@]}" \
+    --entitlements "$APP_ENTITLEMENTS" \
+    "$APP"
+fi
 
 rm -rf "$APP_FINAL"
 mv "$APP" "$APP_FINAL"

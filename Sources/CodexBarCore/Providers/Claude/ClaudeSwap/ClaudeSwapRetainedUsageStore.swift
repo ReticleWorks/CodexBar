@@ -20,6 +20,12 @@ public enum ClaudeSwapRetainedUsageStore {
         return records.map(\.account)
     }
 
+    /// Restores display-ready rows without persisting account labels. The configured alias map
+    /// supplies candidate emails, and the retained fingerprint proves the unique slot/email match.
+    public static func loadForDisplay(displayAliases: [String: String]) -> [ProviderAccountUsageSnapshot] {
+        self.accountsForDisplay(self.load(), displayAliases: displayAliases)
+    }
+
     /// After a relaunch the in-memory array is empty even when this cache still
     /// holds complete windows, so fall back to disk only when nothing is in memory.
     public static func previousAccounts(
@@ -44,6 +50,40 @@ public enum ClaudeSwapRetainedUsageStore {
         _ accounts: [ProviderAccountUsageSnapshot]) -> [ProviderAccountUsageSnapshot]
     {
         accounts.compactMap(Record.init(account:)).map(\.account)
+    }
+
+    static func accountsForDisplay(
+        _ accounts: [ProviderAccountUsageSnapshot],
+        displayAliases: [String: String]) -> [ProviderAccountUsageSnapshot]
+    {
+        accounts.map { account in
+            guard let retainedFingerprint = self.fingerprint(from: account) else { return account }
+            let matches = displayAliases.compactMap { email, alias -> (String, String)? in
+                let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let label = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !normalizedEmail.isEmpty, !label.isEmpty,
+                      self.fingerprint(email: normalizedEmail, slot: account.id.opaqueID) == retainedFingerprint
+                else { return nil }
+                return (normalizedEmail, label)
+            }
+            guard matches.count == 1, let match = matches.first else { return account }
+            let identity = account.snapshot?.identity
+            return ProviderAccountUsageSnapshot(
+                id: account.id,
+                provider: account.provider,
+                displayLabel: match.1,
+                accountEmail: match.0,
+                isActive: account.isActive,
+                canActivate: account.canActivate,
+                snapshot: account.snapshot?.withIdentity(ProviderIdentitySnapshot(
+                    providerID: identity?.providerID ?? account.provider.instanceID,
+                    accountEmail: match.0,
+                    accountOrganization: identity?.accountOrganization,
+                    loginMethod: identity?.loginMethod,
+                    accountID: identity?.accountID)),
+                error: account.error,
+                sourceLabel: account.sourceLabel)
+        }
     }
 
     static func fingerprint(email: String, slot: String) -> String? {
@@ -96,6 +136,8 @@ public enum ClaudeSwapRetainedUsageStore {
         var secondary: RateWindow?
         var extraRateWindows: [NamedRateWindow]?
         var updatedAt: Date
+        var isActive: Bool?
+        var canActivate: Bool?
 
         init?(account: ProviderAccountUsageSnapshot) {
             guard account.id.source == ClaudeSwapAccountProjection.sourceName,
@@ -114,6 +156,8 @@ public enum ClaudeSwapRetainedUsageStore {
             self.secondary = snapshot.secondary
             self.extraRateWindows = snapshot.extraRateWindows
             self.updatedAt = snapshot.updatedAt
+            self.isActive = account.isActive
+            self.canActivate = account.canActivate
         }
 
         var account: ProviderAccountUsageSnapshot {
@@ -123,7 +167,8 @@ public enum ClaudeSwapRetainedUsageStore {
                     opaqueID: self.opaqueID),
                 provider: .claude,
                 displayLabel: "",
-                isActive: false,
+                isActive: self.isActive ?? false,
+                canActivate: self.canActivate ?? false,
                 snapshot: UsageSnapshot(
                     primary: self.primary,
                     secondary: self.secondary,

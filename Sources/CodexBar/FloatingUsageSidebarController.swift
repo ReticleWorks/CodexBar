@@ -99,7 +99,8 @@ final class FloatingUsageSidebarController {
     init(
         store: UsageStore,
         settings: SettingsStore,
-        openProvider: @escaping @MainActor (UsageProvider) -> Void)
+        openProvider: @escaping @MainActor (UsageProvider) -> Void,
+        openSettings: @escaping @MainActor () -> Void)
     {
         self.store = store
         self.settings = settings
@@ -111,7 +112,8 @@ final class FloatingUsageSidebarController {
         self.hostingController = NSHostingController(rootView: FloatingUsagePillView(
             store: store,
             settings: settings,
-            openProvider: openProvider))
+            openProvider: openProvider,
+            openSettings: openSettings))
 
         self.panel.identifier = NSUserInterfaceItemIdentifier("floatingUsageSidebar")
         self.panel.level = .statusBar
@@ -421,28 +423,48 @@ private struct FloatingUsagePillView: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
     let openProvider: @MainActor (UsageProvider) -> Void
+    let openSettings: @MainActor () -> Void
     @State private var selectedProvider: UsageProvider = .claude
 
     var body: some View {
         VStack(spacing: 16) {
             ForEach(self.providers, id: \.self) { provider in
+                let snapshot = FloatingSidebarSnapshotResolver.snapshot(
+                    for: provider,
+                    providerSnapshot: self.store.presentationSnapshot(for: provider),
+                    claudeAccounts: self.store.claudeSwapAccountSnapshots)
                 FloatingUsagePillItem(
                     provider: provider,
-                    snapshot: FloatingSidebarSnapshotResolver.snapshot(
-                        for: provider,
-                        providerSnapshot: self.store.presentationSnapshot(for: provider),
-                        claudeAccounts: self.store.claudeSwapAccountSnapshots),
+                    snapshot: snapshot,
                     isSelected: self.selectedProvider == provider,
                     accentColor: self.settings.accentColor(for: provider),
                     showsUsed: ProviderUsageDisplayPolicy.showsUsed(
                         for: provider,
                         defaultShowUsed: self.settings.usageBarsShowUsed),
                     hidePersonalInfo: self.settings.hidePersonalInfo,
+                    accountDisplayLabel: self.accountDisplayLabel(snapshot: snapshot),
                     openProvider: { selected in
                         self.selectedProvider = selected
                         self.openProvider(selected)
                     })
             }
+
+            Divider()
+                .overlay(Color.white.opacity(0.09))
+                .padding(.horizontal, 4)
+
+            Button {
+                self.openSettings()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 32, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+            .accessibilityLabel("Open Settings")
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 10)
@@ -462,6 +484,13 @@ private struct FloatingUsagePillView: View {
     private var providers: [UsageProvider] {
         self.store.enabledFirstPartyProvidersForDisplay()
     }
+
+    private func accountDisplayLabel(snapshot: UsageSnapshot?) -> String? {
+        guard let email = snapshot?.identity?.accountEmail else { return nil }
+        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return self.settings.codexDisplayAliases[normalized]
+            ?? self.settings.claudeSwapDisplayAliases[normalized]
+    }
 }
 
 @MainActor
@@ -472,6 +501,7 @@ private struct FloatingUsagePillItem: View {
     let accentColor: ProviderColor
     let showsUsed: Bool
     let hidePersonalInfo: Bool
+    let accountDisplayLabel: String?
     let openProvider: @MainActor (UsageProvider) -> Void
 
     var body: some View {
@@ -604,7 +634,7 @@ private struct FloatingUsagePillItem: View {
 
     private var accountLabel: String? {
         guard !self.hidePersonalInfo else { return nil }
-        return self.snapshot?.identity?.accountEmail
+        return self.accountDisplayLabel ?? self.snapshot?.identity?.accountEmail
     }
 
     private var helpText: String {

@@ -191,8 +191,33 @@ extension CodexVisibleAccountProjection {
             else {
                 continue
             }
+            let profileEmail = Self.normalizeVisibleEmail(profileAccount.email)
+            let profileIdentity = snapshot.runtimeIdentity(for: profileAccount)
+            if let existingIndex = drafts.firstIndex(where: { draft in
+                CodexIdentityMatcher.matches(
+                    draft.identity,
+                    lhsEmail: draft.email,
+                    profileIdentity,
+                    rhsEmail: profileEmail)
+            }) {
+                guard drafts[existingIndex].selectionSource == .liveSystem else { continue }
+                let existing = drafts[existingIndex]
+                drafts[existingIndex] = VisibleAccountDraft(
+                    email: profileEmail,
+                    workspaceLabel: Self.normalizeWorkspaceLabel(profileAccount.workspaceLabel)
+                        ?? existing.workspaceLabel,
+                    workspaceAccountID: profileAccount.workspaceAccountID ?? existing.workspaceAccountID,
+                    authFingerprint: profileAccount.authFingerprint,
+                    storedAccountID: existing.storedAccountID,
+                    selectionSource: .profileHome(path: profilePath),
+                    isLive: true,
+                    canReauthenticate: existing.canReauthenticate,
+                    canRemove: existing.canRemove,
+                    identity: profileIdentity)
+                continue
+            }
             drafts.append(VisibleAccountDraft(
-                email: Self.normalizeVisibleEmail(profileAccount.email),
+                email: profileEmail,
                 workspaceLabel: Self.normalizeWorkspaceLabel(profileAccount.workspaceLabel),
                 workspaceAccountID: profileAccount.workspaceAccountID,
                 authFingerprint: profileAccount.authFingerprint,
@@ -201,7 +226,7 @@ extension CodexVisibleAccountProjection {
                 isLive: false,
                 canReauthenticate: false,
                 canRemove: false,
-                identity: snapshot.runtimeIdentity(for: profileAccount)))
+                identity: profileIdentity))
         }
 
         let groupedByEmail = Dictionary(grouping: drafts.indices, by: { drafts[$0].email })
@@ -209,7 +234,7 @@ extension CodexVisibleAccountProjection {
             let id = Self.visibleAccountID(for: draft, emailGroupSize: groupedByEmail[draft.email]?.count ?? 0)
             let isActive = switch resolvedActiveSource {
             case .liveSystem:
-                draft.selectionSource == .liveSystem
+                draft.isLive
             case let .managedAccount(id):
                 draft.selectionSource == .managedAccount(id: id)
             case let .profileHome(path):

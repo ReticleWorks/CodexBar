@@ -9,12 +9,13 @@ extension StatusItemController {
     {
         let accounts = self.store.claudeSwapAccountSnapshots
         if self.settings.multiAccountMenuLayout == .segmented, accounts.count > 1 {
+            let selected = self.claudeSwapDisplayAccount(in: accounts)
             menu.addItem(self.makeClaudeSwapAccountSwitcherItem(
                 accounts: accounts,
+                selectedAccountID: selected?.id,
                 menu: captureMenu,
                 width: context.menuWidth))
             menu.addItem(.separator())
-            let selected = accounts.first(where: \.isActive) ?? accounts.first
             self.addStackedClaudeSwapMenuCards(
                 accounts: selected.map { [$0] } ?? [],
                 to: menu,
@@ -48,24 +49,37 @@ extension StatusItemController {
 
     private func makeClaudeSwapAccountSwitcherItem(
         accounts: [ProviderAccountUsageSnapshot],
+        selectedAccountID: ProviderAccountIdentity?,
         menu: NSMenu,
         width: CGFloat) -> NSMenuItem
     {
         let view = ClaudeSwapAccountSwitcherView(
             accounts: accounts,
-            selectedAccountID: accounts.first(where: \.isActive)?.id,
+            selectedAccountID: selectedAccountID,
             width: width,
             onSelect: { [weak self, weak menu] account in
-                guard let self, let menu, !account.isActive,
-                      let action = self.claudeSwapAccountSwitchAction(account, menu: menu)
-                else { return }
-                action()
+                guard let self, let menu, self.selectedClaudeSwapDisplayAccountID != account.id else { return }
+                self.advanceMenuInteraction(for: menu)
+                self.selectedClaudeSwapDisplayAccountID = account.id
+                self.invalidateMenus()
+                self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .claude)
             })
         let item = NSMenuItem()
         item.title = ""
         item.view = view
         item.isEnabled = false
         return item
+    }
+
+    private func claudeSwapDisplayAccount(
+        in accounts: [ProviderAccountUsageSnapshot]) -> ProviderAccountUsageSnapshot?
+    {
+        if let selectedClaudeSwapDisplayAccountID,
+           let selected = accounts.first(where: { $0.id == selectedClaudeSwapDisplayAccountID })
+        {
+            return selected
+        }
+        return accounts.first(where: \.isActive) ?? accounts.first
     }
 
     private func addClaudeAPIMenuCardsIfAvailable(to menu: NSMenu, context: MenuCardContext) {

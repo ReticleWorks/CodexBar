@@ -296,7 +296,8 @@ extension StatusItemController {
         case .claude:
             return self.settings.claudeSwapDisplayAliases[normalized]
         default:
-            return nil
+            return self.settings.codexDisplayAliases[normalized]
+                ?? self.settings.claudeSwapDisplayAliases[normalized]
         }
     }
 

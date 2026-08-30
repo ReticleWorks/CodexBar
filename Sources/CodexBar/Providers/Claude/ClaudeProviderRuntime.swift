@@ -31,6 +31,7 @@ final class ClaudeProviderRuntime: ProviderRuntime {
         guard configuration.providerEnabled, configuration.enabled, !configuration.executablePath.isEmpty else {
             return
         }
+        context.store.hydrateClaudeSwapAccountsFromCache()
         context.store.scheduleClaudeSwapAccountRefresh()
     }
 

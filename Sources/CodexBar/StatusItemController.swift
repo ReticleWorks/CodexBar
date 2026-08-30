@@ -171,6 +171,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var openMenuRebuildRequests = MenuRebuildRequestRegistry<ObjectIdentifier>()
     var menuIdentitySignatures: [ObjectIdentifier: String] = [:]
     var codexAccountMenuProjectionRevalidationTask: Task<Void, Never>?
+    var selectedClaudeSwapDisplayAccountID: ProviderAccountIdentity?
     var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
     var parentMenuRebuildPendingAfterHostedSubviewClose = false
     var deferredMenuInteractionRefreshProviders: Set<ProviderInstanceID> = []

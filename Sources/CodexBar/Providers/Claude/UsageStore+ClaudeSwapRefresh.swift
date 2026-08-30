@@ -74,6 +74,17 @@ extension UsageStore {
         }
     }
 
+    /// Publishes the last verified rows synchronously at startup while the read-only live list refresh runs.
+    func hydrateClaudeSwapAccountsFromCache() {
+        guard self.shouldFetchClaudeSwapAccounts(), self.claudeSwapAccountSnapshots.isEmpty else { return }
+        let snapshots = ClaudeSwapRetainedUsageStore.loadForDisplay(
+            displayAliases: self.settings.claudeSwapDisplayAliases)
+        guard !snapshots.isEmpty else { return }
+        self.claudeSwapAccountSnapshots = snapshots
+        self.claudeSwapLastRefreshAt = snapshots.compactMap { $0.snapshot?.updatedAt }.max()
+        self.claudeSwapRevision &+= 1
+    }
+
     func refreshClaudeSwapAccounts(generation: UInt64? = nil) async {
         let executablePath = self.settings.claudeSwapExecutablePath
         await self.probeClaudeSwapVersionIfNeeded(executablePath: executablePath)

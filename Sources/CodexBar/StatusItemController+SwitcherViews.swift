@@ -1340,7 +1340,10 @@ final class CodexAccountSwitcherView: NSView {
     private let selectedTextColor: NSColor
     private let unselectedTextColor = NSColor.secondaryLabelColor
     private let buttonFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-    private let buttonHorizontalPadding: CGFloat = 14
+    private var buttonHorizontalPadding: CGFloat {
+        self.accounts.count == 3 ? 8 : 14
+    }
+
     private let buttonSideInset: CGFloat = 6
 
     init(
@@ -1361,9 +1364,9 @@ final class CodexAccountSwitcherView: NSView {
         self.selectedBackground = accentColor.cgColor
         self.selectedTextColor = Self.contrastingTextColor(for: accentColor)
         self.selectedAccountID = selectedAccountID ?? accounts.first?.id ?? ""
-        // Three full account aliases do not fit legibly in the standard menu width.
-        // Claude uses this same two-row selector through its adapter below.
-        let useTwoRows = accounts.count > 2
+        // Three configured aliases fit on one standard-width row with compact padding.
+        // Claude uses this same selector through its adapter below.
+        let useTwoRows = accounts.count > 3
         let rows = useTwoRows ? 2 : 1
         let height = self.rowHeight * CGFloat(rows) + (useTwoRows ? self.rowSpacing : 0)
         self.preferredSize = NSSize(width: width, height: height)
@@ -1415,6 +1418,10 @@ final class CodexAccountSwitcherView: NSView {
                     title: title,
                     target: self,
                     action: #selector(self.handleSelect))
+                if self.accounts.count == 3 {
+                    button.contentPadding.left = 4
+                    button.contentPadding.right = 4
+                }
                 button.identifier = NSUserInterfaceItemIdentifier(account.id)
                 button.toolTip = self.accountToolTips[account.id] ?? self.displayName(for: account)
                 button.isEnabled = self.selectableAccountIDs?.contains(account.id) ?? true
@@ -1715,7 +1722,7 @@ final class CodexAccountSwitcherView: NSView {
 }
 
 /// Claude uses the Codex selector itself through a provider-neutral adapter. This keeps one
-/// implementation of the interaction, sizing, truncation, hover, and two-row behavior.
+/// implementation of the interaction, sizing, truncation, hover, and overflow-row behavior.
 final class ClaudeSwapAccountSwitcherView: NSView {
     private let switcher: CodexAccountSwitcherView
 
@@ -1736,7 +1743,7 @@ final class ClaudeSwapAccountSwitcherView: NSView {
                 canReauthenticate: false,
                 canRemove: false)
         }
-        let selectableIDs = Set(accounts.filter { $0.isActive || $0.canActivate }.map { Self.identifier(for: $0.id) })
+        let selectableIDs = Set(accounts.map { Self.identifier(for: $0.id) })
         let toolTips = Dictionary(uniqueKeysWithValues: accounts.map { account in
             let message = account.error?.trimmingCharacters(in: .whitespacesAndNewlines)
             let text = message.map { "\(account.displayLabel) — \($0)" } ?? account.displayLabel
