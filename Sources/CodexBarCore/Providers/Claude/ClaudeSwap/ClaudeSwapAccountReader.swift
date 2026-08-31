@@ -36,6 +36,7 @@ public enum ClaudeSwapAccountReader {
         let result = try await self.run(
             executablePath: executablePath,
             arguments: ["--list", "--json"],
+            environment: self.accountListEnvironment(),
             timeout: timeout,
             acceptsNonZeroExit: true,
             label: "claude-swap list")
@@ -76,6 +77,7 @@ public enum ClaudeSwapAccountReader {
         guard let output = try? await self.run(
             executablePath: executablePath,
             arguments: ["--version"],
+            environment: self.accountListEnvironment(),
             timeout: timeout,
             label: "claude-swap version")
         else {
@@ -99,6 +101,7 @@ public enum ClaudeSwapAccountReader {
     private static func run(
         executablePath: String,
         arguments: [String],
+        environment: [String: String] = ProcessInfo.processInfo.environment,
         timeout: TimeInterval,
         acceptsNonZeroExit: Bool = false,
         label: String) async throws -> String
@@ -108,7 +111,7 @@ public enum ClaudeSwapAccountReader {
         let result = try await SubprocessRunner.run(
             binary: binary,
             arguments: arguments,
-            environment: ProcessInfo.processInfo.environment,
+            environment: environment,
             timeout: timeout,
             acceptsNonZeroExit: acceptsNonZeroExit,
             label: label)
@@ -116,6 +119,18 @@ public enum ClaudeSwapAccountReader {
             throw ClaudeSwapAccountReaderError.outputTooLarge(byteCount: result.stdout.utf8.count)
         }
         return result.stdout
+    }
+
+    /// Listing must not inspect or mutate the browser user's active Claude profile.
+    /// claude-swap keeps its managed-account store under the user's home directory,
+    /// so an empty profile root still exposes every managed backup as an inactive account.
+    private static func accountListEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let profileRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/CodexBar/ClaudeSwapListProfile", isDirectory: true)
+        environment[ClaudeConfigPaths.configDirectoryEnvironmentKey] = profileRoot.path
+        environment[ClaudeConfigPaths.secureStorageDirectoryEnvironmentKey] = profileRoot.path
+        return environment
     }
 
     /// Once launched, a credential mutation must reach the external tool's

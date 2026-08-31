@@ -32,7 +32,6 @@ final class ClaudeProviderRuntime: ProviderRuntime {
             return
         }
         context.store.hydrateClaudeSwapAccountsFromCache()
-        context.store.scheduleClaudeSwapAccountRefresh()
     }
 
     private struct Configuration: Equatable {

@@ -55,6 +55,8 @@ extension CodexAccountScopedRefreshTests {
         #expect(UsageStore.shouldPreserveCodexAccountSnapshotOnFailure(
             "Network error: The Internet connection appears to be offline."))
         #expect(UsageStore.shouldPreserveCodexAccountSnapshotOnFailure("Request timed out"))
+        #expect(UsageStore.shouldPreserveCodexAccountSnapshotOnFailure(
+            "Codex OAuth token expired or invalid. Run `codex login` to re-authenticate."))
         #expect(!UsageStore.shouldPreserveCodexAccountSnapshotOnFailure("prior error"))
         #expect(!UsageStore.shouldPreserveCodexAccountSnapshotOnFailure("401 unauthorized"))
         #expect(!UsageStore.shouldPreserveCodexAccountSnapshotOnFailure("Workspace deactivated"))

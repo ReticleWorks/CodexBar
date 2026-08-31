@@ -59,31 +59,14 @@ enum MenuSwitchFlickerProbe {
         // path across two sessions (the second verifies open-time behavior with
         // carried-over state such as the stable-height session floor).
         let holdMode = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_MODE"] == "hold"
-        let requestedDelay = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_DELAY_SECONDS"]
-            .flatMap(Double.init)
-        let startDelay = max(0, requestedDelay ?? 4)
-        var configuration = ProbeSession.Configuration()
-        if let interval = ProcessInfo.processInfo.environment[
-            "CODEXBAR_FLICKER_PROBE_SWITCH_INTERVAL_MS"].flatMap(Int.init), interval >= 200
-        {
-            configuration.switchScheduleMs = (0..<6).map { 400 + $0 * interval }
-            let captureDelay = ProcessInfo.processInfo.environment[
-                "CODEXBAR_FLICKER_PROBE_CAPTURE_DELAY_MS"].flatMap(Int.init) ?? 150
-            configuration.sessionEndMs = (configuration.switchScheduleMs.last ?? 0) + max(0, captureDelay) + 500
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + startDelay) {
-            self.beginRetainedSession(
-                controller: controller,
-                directory: directory,
-                holdMode: holdMode,
-                configuration: configuration)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            self.beginRetainedSession(controller: controller, directory: directory, holdMode: holdMode)
             guard !holdMode else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 self.beginRetainedSession(
                     controller: controller,
                     directory: directory.appendingPathComponent("second"),
-                    holdMode: false,
-                    configuration: configuration)
+                    holdMode: false)
             }
         }
     }
@@ -224,9 +207,6 @@ enum MenuSwitchFlickerProbe {
         private var grabber: BackgroundFrameGrabber?
         private var originalSegment: Int?
         private var targetSegment: Int?
-        private var allSegments: [Int] = []
-        private var appKitCaptureIndex = 0
-        private var pendingAppKitCapture: (deadlineMs: Int, label: String)?
 
         init(
             controller: StatusItemController,
@@ -263,10 +243,6 @@ enum MenuSwitchFlickerProbe {
         private func tick() {
             guard let startedAt = self.startedAtOrLocateMenu() else { return }
             let now = Int((DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000)
-            if let pending = self.pendingAppKitCapture, now >= pending.deadlineMs {
-                self.captureAppKitFrame(label: pending.label)
-                self.pendingAppKitCapture = nil
-            }
             if !self.holdMode,
                self.switchScheduleIndex < self.configuration.switchScheduleMs.count,
                now >= self.configuration.switchScheduleMs[self.switchScheduleIndex]
@@ -275,23 +251,16 @@ enum MenuSwitchFlickerProbe {
                 self.switchScheduleIndex += 1
                 // Cycle through overview (segment 0) too so full-rebuild transitions
                 // are exercised alongside cached swaps.
-                let auditAllSegments = ProcessInfo.processInfo.environment[
-                    "CODEXBAR_FLICKER_PROBE_ALL_SEGMENTS"] == "1"
-                let cycle: [Int?] = auditAllSegments && !self.allSegments.isEmpty
-                    ? self.allSegments.map(Optional.some)
-                    : [
-                        self.targetSegment,
-                        0,
-                        self.originalSegment,
-                        0,
-                        self.targetSegment,
-                        self.originalSegment,
+                let cycle: [Int?] = [
+                    self.targetSegment,
+                    0,
+                    self.originalSegment,
+                    0,
+                    self.targetSegment,
+                    self.originalSegment,
                 ]
                 let segment = cycle[switchIndex % cycle.count]
                 let handled = segment.map { self.switchSegment($0) } ?? false
-                let captureDelay = ProcessInfo.processInfo.environment[
-                    "CODEXBAR_FLICKER_PROBE_CAPTURE_DELAY_MS"].flatMap(Int.init) ?? 150
-                self.pendingAppKitCapture = (now + max(0, captureDelay), "segment-\(segment ?? -1)")
                 self.log.append("switch#\(switchIndex) to segment \(String(describing: segment)) " +
                     "at \(now)ms handled=\(handled)")
                 return
@@ -324,7 +293,6 @@ enum MenuSwitchFlickerProbe {
                 self.log.append("menu located, windowNumber=\(window.windowNumber) " +
                     "frame=\(window.frame) original=\(String(describing: self.originalSegment)) " +
                     "target=\(String(describing: self.targetSegment))")
-                self.captureAppKitFrame(label: "initial")
                 // Export CG (top-left origin) bounds for external click drivers;
                 // other processes cannot enumerate this menu window.
                 let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
@@ -360,7 +328,6 @@ enum MenuSwitchFlickerProbe {
             if includesOverview {
                 segments.insert(.overview, at: 0)
             }
-            self.allSegments = Array(segments.indices)
             self.originalSegment = segments.firstIndex(of: selection)
             self.targetSegment = segments.firstIndex { candidate in
                 candidate != selection && candidate != .overview
@@ -370,50 +337,6 @@ enum MenuSwitchFlickerProbe {
         private func switchSegment(_ index: Int) -> Bool {
             guard let switcher = self.menu?.items.first?.view as? ProviderSwitcherView else { return false }
             return switcher.handleKeyboardSelection(at: index)
-        }
-
-        /// Screen Recording permission can make WindowServer captures opaque black.
-        /// The probe therefore also records the menu's own AppKit rendering. This is
-        /// diagnostic-only and never runs unless the flicker-probe environment is set.
-        private func captureAppKitFrame(label: String) {
-            if label.contains("segment-2"),
-               let subscriptionView = self.menu?.items.first(where: {
-                   ($0.representedObject as? String) == "menuCard-0"
-               })?.view
-            {
-                self.captureView(subscriptionView, name: "claude-subscription-card")
-            }
-            if label.contains("segment-2"),
-               let apiView = self.menu?.items.first(where: {
-                   ($0.representedObject as? String)?.hasPrefix("claudeAPISummary-") == true
-               })?.submenu?.items.compactMap(\.view).first
-            {
-                self.captureView(apiView, name: "claude-api-card")
-            }
-            guard let view = self.menu?.items.compactMap(\.view?.window?.contentView).first else { return }
-            view.layoutSubtreeIfNeeded()
-            guard view.bounds.width > 0,
-                  view.bounds.height > 0,
-                  let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-            else { return }
-            view.cacheDisplay(in: view.bounds, to: representation)
-            guard let data = representation.representation(using: .png, properties: [:]) else { return }
-            let name = String(format: "appkit-%02d-%@.png", self.appKitCaptureIndex, label)
-            self.appKitCaptureIndex += 1
-            try? data.write(to: self.directory.appendingPathComponent(name), options: .atomic)
-        }
-
-        private func captureView(_ view: NSView, name: String) {
-            view.layoutSubtreeIfNeeded()
-            guard view.bounds.width > 0,
-                  view.bounds.height > 0,
-                  let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-            else { return }
-            view.cacheDisplay(in: view.bounds, to: representation)
-            guard let data = representation.representation(using: .png, properties: [:]) else { return }
-            try? data.write(
-                to: self.directory.appendingPathComponent("\(name).png"),
-                options: .atomic)
         }
 
         private func finish() {

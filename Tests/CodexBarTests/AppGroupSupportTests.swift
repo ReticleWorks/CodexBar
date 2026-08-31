@@ -4,6 +4,24 @@ import Testing
 
 struct AppGroupSupportTests {
     @Test
+    func appGroupAccessRequiresTheMatchingSignedEntitlement() {
+        let groupID = "Y5PE65HELJ.com.steipete.codexbar"
+
+        #expect(!AppGroupSupport.canUseAppGroup(
+            groupID: groupID,
+            signedTeamID: nil,
+            signedGroups: [groupID]))
+        #expect(AppGroupSupport.canUseAppGroup(
+            groupID: groupID,
+            signedTeamID: "Y5PE65HELJ",
+            signedGroups: [groupID]))
+        #expect(!AppGroupSupport.canUseAppGroup(
+            groupID: groupID,
+            signedTeamID: "ABCDE12345",
+            signedGroups: [groupID]))
+    }
+
+    @Test
     func `app group identifiers use resolved team-prefixed release and debug variants`() {
         #expect(
             AppGroupSupport.currentGroupID(teamID: "Y5PE65HELJ", bundleID: "com.steipete.codexbar")

@@ -83,6 +83,7 @@ struct CodexProfileHomeAccountTests {
         #expect(snapshot.profileHomeAccounts.map(\.email) == ["profile@example.com"])
         #expect(snapshot.profileHomeAccounts.map(\.codexHomePath) == [normalizedProfilePath])
         #expect(snapshot.profileHomePaths == [normalizedProfilePath])
+        #expect(snapshot.discoveryAuthority == .complete)
         #expect(projection.visibleAccounts.map(\.email) == ["profile@example.com"])
         #expect(projection.activeVisibleAccountID == "profile@example.com")
         #expect(projection.liveVisibleAccountID == nil)
@@ -391,7 +392,9 @@ struct CodexProfileHomeAccountTests {
             tokenOverride: nil)
 
         #expect(settings.codexResolvedActiveSource == .profileHome(path: normalizedProfilePath))
-        #expect(settings.codexAccountReconciliationSnapshot.profileHomeAccounts.isEmpty)
+        let snapshot = settings.codexAccountReconciliationSnapshot
+        #expect(snapshot.profileHomeAccounts.isEmpty)
+        #expect(snapshot.discoveryAuthority == .incomplete)
         #expect(environment["CODEX_HOME"] == normalizedProfilePath)
         #expect(!settings.persistResolvedCodexActiveSourceCorrectionIfNeeded())
         #expect(settings.codexActiveSource == .profileHome(path: normalizedProfilePath))

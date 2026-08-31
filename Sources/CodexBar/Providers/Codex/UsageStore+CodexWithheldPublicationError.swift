@@ -28,6 +28,7 @@ extension UsageStore {
         }
 
         // Single-account refresh empties the in-memory rows; amend disk without losing preserved data or siblings.
+        guard self.settings.codexAccountReconciliationSnapshot.discoveryAuthority.isComplete else { return }
         guard let snapshotStore = self.codexAccountUsageSnapshotStore else { return }
         var persisted = snapshotStore.load(for: visibleAccounts)
         guard let index = persisted.firstIndex(where: {

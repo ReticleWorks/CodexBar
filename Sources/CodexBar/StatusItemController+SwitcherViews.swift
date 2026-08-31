@@ -29,9 +29,7 @@ final class ProviderSwitcherView: NSView {
     private var quotaIndicators: [ObjectIdentifier: QuotaIndicator] = [:]
     private var hoverTrackingArea: NSTrackingArea?
     private var segmentWidths: [CGFloat] = []
-    private let selectedBackground = NSColor.controlAccentColor.cgColor
     private let unselectedBackground = NSColor.clear.cgColor
-    private let selectedTextColor = NSColor.white
     private let unselectedTextColor = NSColor.secondaryLabelColor
     private let stackedIcons: Bool
     private let rowCount: Int
@@ -695,9 +693,12 @@ final class ProviderSwitcherView: NSView {
         for button in self.buttons {
             let isSelected = button.state == .on
             let isHovered = self.hoveredButtonTag == button.tag
-            button.contentTintColor = isSelected ? self.selectedTextColor : self.unselectedTextColor
+            let selectedColor = self.selectedColor(for: button.tag)
+            button.contentTintColor = isSelected
+                ? Self.contrastingTextColor(for: selectedColor)
+                : self.unselectedTextColor
             button.layer?.backgroundColor = if isSelected {
-                self.selectedBackground
+                selectedColor.cgColor
             } else if isHovered {
                 self.hoverPlateColor()
             } else {
@@ -707,6 +708,24 @@ final class ProviderSwitcherView: NSView {
             (button as? StackedToggleButton)?.setContentTintColor(button.contentTintColor)
             (button as? InlineIconToggleButton)?.setContentTintColor(button.contentTintColor)
         }
+    }
+
+    private func selectedColor(for index: Int) -> NSColor {
+        guard self.segments.indices.contains(index) else { return .controlAccentColor }
+        switch self.segments[index].selection {
+        case let .provider(instanceID):
+            guard let provider = instanceID.firstPartyProvider else { return .controlAccentColor }
+            let color = ProviderAccentPalette.color(for: provider)
+            return NSColor(deviceRed: color.red, green: color.green, blue: color.blue, alpha: 1)
+        case .overview:
+            return .controlAccentColor
+        }
+    }
+
+    private static func contrastingTextColor(for background: NSColor) -> NSColor {
+        guard let rgb = background.usingColorSpace(.deviceRGB) else { return .white }
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.62 ? NSColor(deviceWhite: 0.08, alpha: 1) : .white
     }
 
     private func isLightMode() -> Bool {
@@ -1194,20 +1213,23 @@ final class TokenAccountSwitcherView: NSView {
     private let preferredSize: NSSize
     private let rowSpacing: CGFloat = 4
     private let rowHeight: CGFloat = 26
-    private let selectedBackground = NSColor.controlAccentColor.cgColor
+    private let selectedBackground: CGColor
     private let unselectedBackground = NSColor.clear.cgColor
-    private let selectedTextColor = NSColor.white
+    private let selectedTextColor: NSColor
     private let unselectedTextColor = NSColor.secondaryLabelColor
 
     init(
         accounts: [ProviderTokenAccount],
         selectedIndex: Int,
         width: CGFloat,
+        accentColor: NSColor = .controlAccentColor,
         onSelect: @escaping (Int) -> Task<Void, Never>?)
     {
         self.accounts = accounts
         self.onSelect = onSelect
         self.selectedIndex = min(max(selectedIndex, 0), max(0, accounts.count - 1))
+        self.selectedBackground = accentColor.cgColor
+        self.selectedTextColor = Self.contrastingTextColor(for: accentColor)
         let useTwoRows = accounts.count > 3
         let rows = useTwoRows ? 2 : 1
         let height = self.rowHeight * CGFloat(rows) + (useTwoRows ? self.rowSpacing : 0)
@@ -1297,6 +1319,12 @@ final class TokenAccountSwitcherView: NSView {
             button.layer?.backgroundColor = selected ? self.selectedBackground : self.unselectedBackground
             button.contentTintColor = selected ? self.selectedTextColor : self.unselectedTextColor
         }
+    }
+
+    private static func contrastingTextColor(for background: NSColor) -> NSColor {
+        guard let rgb = background.usingColorSpace(.deviceRGB) else { return .white }
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.62 ? NSColor(deviceWhite: 0.08, alpha: 1) : .white
     }
 
     @objc private func handleSelect(_ sender: NSButton) {
@@ -1719,74 +1747,4 @@ final class CodexAccountSwitcherView: NSView {
         return self.toolTip
     }
     #endif
-}
-
-/// Claude uses the Codex selector itself through a provider-neutral adapter. This keeps one
-/// implementation of the interaction, sizing, truncation, hover, and overflow-row behavior.
-final class ClaudeSwapAccountSwitcherView: NSView {
-    private let switcher: CodexAccountSwitcherView
-
-    init(
-        accounts: [ProviderAccountUsageSnapshot],
-        selectedAccountID: ProviderAccountIdentity?,
-        width: CGFloat,
-        onSelect: @escaping (ProviderAccountUsageSnapshot) -> Void)
-    {
-        let mapped = accounts.map { account in
-            CodexVisibleAccount(
-                id: Self.identifier(for: account.id),
-                email: account.displayLabel,
-                storedAccountID: nil,
-                selectionSource: .liveSystem,
-                isActive: account.isActive,
-                isLive: account.isActive,
-                canReauthenticate: false,
-                canRemove: false)
-        }
-        let selectableIDs = Set(accounts.map { Self.identifier(for: $0.id) })
-        let toolTips = Dictionary(uniqueKeysWithValues: accounts.map { account in
-            let message = account.error?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let text = message.map { "\(account.displayLabel) — \($0)" } ?? account.displayLabel
-            return (Self.identifier(for: account.id), text)
-        })
-        self.switcher = CodexAccountSwitcherView(
-            accounts: mapped,
-            selectedAccountID: selectedAccountID.map(Self.identifier(for:)),
-            width: width,
-            accentColor: StatusItemController.accountSwitcherAccentColor(for: .claude),
-            selectableAccountIDs: selectableIDs,
-            accountToolTips: toolTips,
-            onSelect: { selected in
-                guard let account = accounts.first(where: { Self.identifier(for: $0.id) == selected.id }) else {
-                    return
-                }
-                onSelect(account)
-            })
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: self.switcher.fittingSize.height))
-        self.switcher.translatesAutoresizingMaskIntoConstraints = false
-        self.addSubview(self.switcher)
-        NSLayoutConstraint.activate([
-            self.switcher.leadingAnchor.constraint(equalTo: self.leadingAnchor),
-            self.switcher.trailingAnchor.constraint(equalTo: self.trailingAnchor),
-            self.switcher.topAnchor.constraint(equalTo: self.topAnchor),
-            self.switcher.bottomAnchor.constraint(equalTo: self.bottomAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override var intrinsicContentSize: NSSize {
-        self.switcher.intrinsicContentSize
-    }
-
-    override var fittingSize: NSSize {
-        self.switcher.fittingSize
-    }
-
-    private static func identifier(for id: ProviderAccountIdentity) -> String {
-        "\(id.source):\(id.opaqueID)"
-    }
 }

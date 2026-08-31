@@ -50,3 +50,14 @@ enum ProviderAccentPalette {
         self.lock.unlock()
     }
 }
+
+enum ProviderUsageRiskPalette {
+    static let warning = ProviderColor(hex: 0xF2A614)
+    static let critical = ProviderColor(hex: 0xD62921)
+
+    static func color(usedPercent: Double, brandColor: ProviderColor) -> ProviderColor {
+        if usedPercent >= 95 { return self.critical }
+        if usedPercent >= 80 { return self.warning }
+        return brandColor
+    }
+}

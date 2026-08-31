@@ -24,9 +24,17 @@ public enum ClaudeSwapAccountProjection {
         let previousByID = Dictionary(
             previousAccounts.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first })
+        let availableNumbers = Set(list.accounts.map(\.number))
+        let retainedActiveNumber = previousAccounts
+            .first { $0.isActive && $0.id.source == self.sourceName }
+            .flatMap { Int($0.id.opaqueID) }
+            .flatMap { availableNumbers.contains($0) ? $0 : nil }
+        let activeNumber = list.activeAccountNumber ?? retainedActiveNumber
         let ordered = list.accounts.sorted { lhs, rhs in
-            if lhs.isActive != rhs.isActive {
-                return lhs.isActive
+            let lhsIsActive = lhs.number == activeNumber
+            let rhsIsActive = rhs.number == activeNumber
+            if lhsIsActive != rhsIsActive {
+                return lhsIsActive
             }
             return lhs.number < rhs.number
         }
@@ -40,6 +48,7 @@ public enum ClaudeSwapAccountProjection {
             displayAliases: normalizedAliases)
         return zip(ordered, labels).map { row, label in
             let id = ProviderAccountIdentity(source: self.sourceName, opaqueID: String(row.number))
+            let isActive = row.number == activeNumber
             let snapshot = self.usageSnapshot(
                 for: row,
                 previous: previousByID[id],
@@ -49,8 +58,8 @@ public enum ClaudeSwapAccountProjection {
                 provider: .claude,
                 displayLabel: label,
                 accountEmail: row.email.isEmpty ? nil : row.email,
-                isActive: row.isActive,
-                canActivate: !row.isActive && self.canActivate(row),
+                isActive: isActive,
+                canActivate: !isActive && self.canActivate(row),
                 snapshot: snapshot,
                 error: self.errorText(for: row, snapshot: snapshot, now: now),
                 sourceLabel: self.sourceLabel)

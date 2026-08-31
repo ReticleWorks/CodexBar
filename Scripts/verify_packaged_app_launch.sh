@@ -198,6 +198,14 @@ if [[ "$PROBE_STATUS" -ne 0 ]] || ! grep -q "CODEXBAR_RESOURCE_SMOKE_OK" "$PROBE
 fi
 log "Launch smoke check: resource probe OK."
 
+# The deterministic probes above exit before normal app startup. Keep the
+# provider-refreshing launch below operator-gated so packaging cannot contact
+# CLIs, credentials, browsers, or other apps as a side effect.
+if [[ "${CODEXBAR_ALLOW_LIVE_LAUNCH_SMOKE:-0}" != "1" ]]; then
+  log "Launch smoke check: live app launch skipped; set CODEXBAR_ALLOW_LIVE_LAUNCH_SMOKE=1 only for an operator-approved live check."
+  exit 0
+fi
+
 # Phase 2: launch the app for real and require it to stay alive.
 log "Launch smoke check: running packaged binary with ${ROOT} unreadable for ${SMOKE_SECONDS}s."
 (

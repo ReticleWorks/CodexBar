@@ -689,13 +689,10 @@ private struct UsageMenuCardUsageContentView: View {
     private func progressColor(for metric: UsageMenuCardView.Model.Metric) -> Color {
         guard self.model.provider == .claude else { return self.model.progressColor }
         let usedPercent = metric.percentStyle == .used ? metric.percent : 100 - metric.percent
-        if usedPercent >= 95 {
-            return Color(red: 0.84, green: 0.16, blue: 0.13)
-        }
-        if usedPercent >= 80 {
-            return Color(red: 0.95, green: 0.65, blue: 0.08)
-        }
-        return self.model.progressColor
+        let brand = ProviderDescriptorRegistry.descriptor(for: .claude).branding.color
+        let color = ProviderUsageRiskPalette.color(usedPercent: usedPercent, brandColor: brand)
+        guard color != brand else { return self.model.progressColor }
+        return Color(red: color.red, green: color.green, blue: color.blue)
     }
 
     var body: some View {

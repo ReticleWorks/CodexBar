@@ -322,7 +322,7 @@ final class SettingsStore {
         copilotTokenStore: any CopilotTokenStoring = KeychainCopilotTokenStore(),
         tokenAccountStore: any ProviderTokenAccountStoring = FileTokenAccountStore(),
         antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
-        performInitialProviderDetection: Bool = !SettingsStore.isRunningTests)
+        performInitialProviderDetection: Bool = false)
     {
         if !Self.isRunningTests {
             _ = UserProviderPluginRegistry.refresh()

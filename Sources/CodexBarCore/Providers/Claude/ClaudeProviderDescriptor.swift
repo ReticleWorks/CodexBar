@@ -140,7 +140,7 @@ public enum ClaudeProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .claude),
                 iconResourceName: "ProviderIcon-claude",
-                color: ProviderColor(red: 204 / 255, green: 124 / 255, blue: 94 / 255),
+                color: ProviderColor(hex: 0xD97757),
                 confettiPalette: [
                     ProviderColor(hex: 0xD97757),
                     ProviderColor(hex: 0xF0EEE6),
@@ -1195,10 +1195,9 @@ enum ClaudeCLIBackgroundAvailability {
             guard ClaudeOAuthKeychainPromptPreference.storedMode() == .always else { return false }
             return oauthCredentialsConfirmedAbsent()
         }
-        // Disable Keychain explicitly permits one owner-CLI usage attempt on a cold profile. A failed attempt
-        // records revocation below, preventing each background timer tick from retrying until a foreground success.
-        guard let marker = self.captureMarker(binary: binary, environment: environment) else { return false }
-        return !self.store.isRevoked(marker)
+        // Disabling Keychain is a complete background opt-out. The owner CLI may
+        // still be run by an explicit user refresh.
+        return false
     }
 
     static func establish(binary: String, environment: [String: String]) {

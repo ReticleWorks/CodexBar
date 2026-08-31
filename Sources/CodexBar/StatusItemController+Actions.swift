@@ -589,6 +589,24 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         item.button?.performClick(nil)
     }
 
+    func openMenu(for provider: UsageProvider) {
+        _ = self.closeOpenMenusFromShortcutIfNeeded()
+        self.selectedMenuProvider = provider.instanceID
+        self.settings.mergedMenuLastSelectedWasOverview = false
+        self.lastMenuProvider = provider.instanceID
+
+        // AppKit needs the close from an already tracked menu to settle before it can
+        // open the requested provider's menu again.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.shouldMergeIcons {
+                self.statusItem.button?.performClick(nil)
+            } else {
+                self.lazyStatusItem(for: provider).button?.performClick(nil)
+            }
+        }
+    }
+
     @discardableResult
     func closeOpenMenusFromShortcutIfNeeded() -> Bool {
         guard !self.openMenus.isEmpty else { return false }

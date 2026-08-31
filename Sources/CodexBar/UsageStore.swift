@@ -76,11 +76,6 @@ extension UsageStore {
                 guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
                 self.startTimer()
                 self.updateProviderRuntimes()
-                let enabledNow = Set(self.settings.enabledProvidersOrdered(
-                    metadataByProvider: self.providerMetadata))
-                if enabledNow != self.versionDetectionProviders {
-                    self.detectVersions()
-                }
                 await self.refreshHistoricalDatasetIfNeeded()
                 await self.refreshForSettingsChange()
             }
@@ -550,16 +545,7 @@ final class UsageStore {
         guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
         self.hydrateCachedTokenSnapshots()
         self.startSharedSpendDashboardPublication()
-        self.detectVersions()
         self.updateProviderRuntimes()
-        Task { @MainActor [weak self] in
-            self?.schedulePathDebugInfoRefresh()
-        }
-        LoginShellPathCache.shared.captureOnce { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.schedulePathDebugInfoRefresh()
-            }
-        }
         Task { @MainActor [weak self] in
             await self?.refreshHistoricalDatasetIfNeeded()
         }

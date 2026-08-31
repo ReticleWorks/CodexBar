@@ -47,7 +47,7 @@ extension StatusItemController {
         // with token-account cards or the segmented token-account switcher.
         if ClaudeSwapMenuPrecedence.prefersClaudeSwap(
             provider: provider,
-            accountCount: self.store.claudeSwapAccountSnapshots.count,
+            accountCount: self.store.accountProjection(for: .claude).subscriptions.count,
             showSingleAccount: self.settings.claudeSwapShowSingleAccount)
         {
             return nil
@@ -151,6 +151,24 @@ extension StatusItemController {
                 snapshot.id == account.id &&
                     UsageStore.codexPriorSnapshotAccountMatches(snapshot.account, account: account)
             }
+        }
+    }
+
+    /// Menu readiness is a read-only join of the cached authoritative account projection and usage rows. It must
+    /// not re-read auth files or start a provider fetch while AppKit is opening the menu.
+    func codexVisibleAccountUsageNeedsRefreshOnMenuOpen() -> Bool {
+        guard let projection = self.settings.codexVisibleAccountProjectionForMenuDisplay,
+              projection.visibleAccounts.count > 1
+        else { return false }
+
+        return projection.visibleAccounts.contains { account in
+            guard let snapshot = self.store.codexAccountSnapshots.first(where: {
+                $0.id == account.id &&
+                    UsageStore.codexPriorSnapshotAccountMatches($0.account, account: account)
+            }) else {
+                return true
+            }
+            return snapshot.snapshot == nil
         }
     }
 

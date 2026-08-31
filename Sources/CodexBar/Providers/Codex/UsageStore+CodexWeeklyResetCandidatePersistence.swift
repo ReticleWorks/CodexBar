@@ -18,6 +18,8 @@ extension UsageStore {
         }
         guard activeMatches.count == 1, let account = activeMatches.first else { return }
 
+        guard self.settings.codexAccountReconciliationSnapshot.discoveryAuthority.isComplete else { return }
+
         // Single-account refresh clears memory before admission; keep the persisted rows and their credits intact.
         var records = self.codexAccountSnapshots
         let persisted = self.codexAccountUsageSnapshotStore?.load(for: visibleAccounts) ?? []

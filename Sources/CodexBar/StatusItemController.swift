@@ -9,6 +9,7 @@ import QuartzCore
 protocol StatusItemControlling: AnyObject {
     func setSettingsOpenHandler(_ handler: @escaping @MainActor (SettingsPane?) -> Void)
     func openMenuFromShortcut()
+    func openMenu(for provider: UsageProvider)
     func runLoginFlowFromSettings(provider: UsageProvider) async
     func celebrationOriginPoint(for provider: UsageProvider?) -> CGPoint?
     func trimRebuildableCachesForMemoryPressure() -> MemoryPressureCacheTrimSummary
@@ -19,6 +20,10 @@ protocol StatusItemControlling: AnyObject {
 }
 
 extension StatusItemControlling {
+    func openMenu(for _: UsageProvider) {
+        self.openMenuFromShortcut()
+    }
+
     func celebrationOriginPoint(for provider: UsageProvider?) -> CGPoint? {
         nil
     }

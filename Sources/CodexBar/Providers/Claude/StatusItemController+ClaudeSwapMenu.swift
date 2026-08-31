@@ -7,11 +7,12 @@ extension StatusItemController {
         captureMenu: NSMenu,
         context: MenuCardContext)
     {
-        let accounts = self.store.claudeSwapAccountSnapshots
+        let projection = self.store.accountProjection(for: .claude)
+        let accounts = projection.subscriptions
         if self.settings.multiAccountMenuLayout == .segmented, accounts.count > 1 {
             let selected = self.claudeSwapDisplayAccount(in: accounts)
             menu.addItem(self.makeClaudeSwapAccountSwitcherItem(
-                accounts: accounts,
+                options: accounts,
                 selectedAccountID: selected?.id,
                 menu: captureMenu,
                 width: context.menuWidth))
@@ -21,13 +22,19 @@ extension StatusItemController {
                 to: menu,
                 captureMenu: captureMenu,
                 context: context)
-            self.addClaudeAPIMenuCardsIfAvailable(to: menu, context: context)
+            self.addClaudeAPIMenuCardsIfAvailable(
+                to: menu,
+                context: context,
+                projection: projection)
             return
         }
         let plan = self.compactAccountPlan(for: .claude, accounts: accounts)
         guard plan.usesCompactLayout else {
             self.addStackedClaudeSwapMenuCards(accounts: accounts, to: menu, captureMenu: captureMenu, context: context)
-            self.addClaudeAPIMenuCardsIfAvailable(to: menu, context: context)
+            self.addClaudeAPIMenuCardsIfAvailable(
+                to: menu,
+                context: context,
+                projection: projection)
             return
         }
         self.addCompactAccountMenuRows(
@@ -44,23 +51,27 @@ extension StatusItemController {
             to: menu,
             captureMenu: captureMenu,
             context: context)
-        self.addClaudeAPIMenuCardsIfAvailable(to: menu, context: context)
+        self.addClaudeAPIMenuCardsIfAvailable(
+            to: menu,
+            context: context,
+            projection: projection)
     }
 
     private func makeClaudeSwapAccountSwitcherItem(
-        accounts: [ProviderAccountUsageSnapshot],
+        options: [ProviderAccountUsageSnapshot],
         selectedAccountID: ProviderAccountIdentity?,
         menu: NSMenu,
         width: CGFloat) -> NSMenuItem
     {
         let view = ClaudeSwapAccountSwitcherView(
-            accounts: accounts,
+            options: options,
             selectedAccountID: selectedAccountID,
             width: width,
-            onSelect: { [weak self, weak menu] account in
-                guard let self, let menu, self.selectedClaudeSwapDisplayAccountID != account.id else { return }
+            accentColor: Self.accountSwitcherAccentColor(for: .claude),
+            onSelect: { [weak self, weak menu] option in
+                guard let self, let menu, self.selectedClaudeSwapDisplayAccountID != option.id else { return }
                 self.advanceMenuInteraction(for: menu)
-                self.selectedClaudeSwapDisplayAccountID = account.id
+                self.selectedClaudeSwapDisplayAccountID = option.id
                 self.invalidateMenus()
                 self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .claude)
             })
@@ -82,14 +93,27 @@ extension StatusItemController {
         return accounts.first(where: \.isActive) ?? accounts.first
     }
 
-    private func addClaudeAPIMenuCardsIfAvailable(to menu: NSMenu, context: MenuCardContext) {
-        let accounts = self.settings.tokenAccounts(for: .claude)
-        let snapshots = self.store.validTokenAccountSnapshots(provider: .claude, accounts: accounts)
-        let cards = snapshots.compactMap { snapshot -> (UUID, UsageMenuCardView.Model)? in
-            guard let model = self.tokenAccountMenuCardModel(for: .claude, accountSnapshot: snapshot) else {
+    private func addClaudeAPIMenuCardsIfAvailable(
+        to menu: NSMenu,
+        context: MenuCardContext,
+        projection: AccountProjection)
+    {
+        let accountsByID = Dictionary(
+            uniqueKeysWithValues: self.settings.tokenAccounts(for: .claude).map { ($0.id, $0) })
+        let cards = projection.apiSpend.compactMap { row -> (ProviderAccountUsageSnapshot, UsageMenuCardView.Model)? in
+            guard let accountID = UUID(uuidString: row.id.opaqueID),
+                  let account = accountsByID[accountID]
+            else { return nil }
+            let accountSnapshot = TokenAccountUsageSnapshot(
+                account: account,
+                snapshot: row.snapshot,
+                error: row.error,
+                sourceLabel: row.sourceLabel,
+                cacheKey: self.store.tokenAccountSnapshotCacheKey(provider: .claude, account: account))
+            guard let model = self.tokenAccountMenuCardModel(for: .claude, accountSnapshot: accountSnapshot) else {
                 return nil
             }
-            return (snapshot.account.id, model)
+            return (row, model)
         }
         guard !cards.isEmpty else { return }
 
@@ -98,23 +122,25 @@ extension StatusItemController {
         header.representedObject = "claudeAPIHeader"
         menu.addItem(.separator())
         menu.addItem(header)
-        for card in cards {
+        for (row, model) in cards {
             let detailsMenu = NSMenu()
             detailsMenu.autoenablesItems = false
             detailsMenu.addItem(self.makeMenuCardItem(
-                UsageMenuCardView(model: card.1, width: context.menuWidth),
-                id: "claudeAPI-\(card.0.uuidString)",
+                UsageMenuCardView(model: model, width: context.menuWidth),
+                id: "claudeAPI-\(row.id.opaqueID)",
                 width: context.menuWidth,
-                heightCacheScope: "claude-api-\(card.0.uuidString)",
-                heightCacheFingerprint: card.1.heightFingerprint(section: "api"),
+                heightCacheScope: "claude-api-\(row.id.opaqueID)",
+                heightCacheFingerprint: model.heightFingerprint(section: "api"),
                 containsInteractiveControls: true))
-            let spend = card.1.providerCost?.spendLine ?? L("Details")
-            let account = card.1.email.isEmpty ? L("Claude API") : card.1.email
+            let spend = model.providerCost?.spendLine
+                ?? row.error
+                ?? (projection.isRefreshing ? L("Refreshing") : L("Not fetched yet"))
+            let account = row.displayLabel.isEmpty ? L("Claude API") : row.displayLabel
             let item = NSMenuItem(
                 title: "\(account) · \(spend)",
                 action: nil,
                 keyEquivalent: "")
-            item.representedObject = "claudeAPISummary-\(card.0.uuidString)"
+            item.representedObject = "claudeAPISummary-\(row.id.opaqueID)"
             item.submenu = detailsMenu
             menu.addItem(item)
         }
@@ -126,10 +152,10 @@ extension StatusItemController {
         captureMenu: NSMenu,
         context: MenuCardContext)
     {
-        let cardRows = accounts.compactMap { account ->
-            (account: ProviderAccountUsageSnapshot, model: UsageMenuCardView.Model)? in
-            guard let model = self.claudeSwapCardModel(for: account) else { return nil }
-            return (account, model)
+        let cardRows = accounts.compactMap { option ->
+            (option: ProviderAccountUsageSnapshot, model: UsageMenuCardView.Model)? in
+            guard let model = self.claudeSwapCardModel(for: option) else { return nil }
+            return (option, model)
         }
         self.addStackedMenuCards(
             cardRows.map(\.model),
@@ -137,46 +163,41 @@ extension StatusItemController {
             context: context,
             planAction: { [weak self] index in
                 guard cardRows.indices.contains(index) else { return nil }
-                return self?.claudeSwapAccountSwitchAction(cardRows[index].account, menu: captureMenu)
+                return self?.claudeSwapAccountSwitchAction(cardRows[index].option, menu: captureMenu)
             })
     }
 
-    private func claudeSwapCardModel(for account: ProviderAccountUsageSnapshot) -> UsageMenuCardView.Model? {
+    private func claudeSwapCardModel(for option: ProviderAccountUsageSnapshot) -> UsageMenuCardView.Model? {
         self.menuCardModel(
             for: .claude,
-            snapshotOverride: account.snapshot,
-            errorOverride: ClaudeSwapAccountProjection.displayError(
-                accountError: account.error,
-                adapterError: self.store.claudeSwapLastError,
-                switchError: self.store.claudeSwapTransientState.lastErrorAccountID == account.id
-                    ? self.store.claudeSwapTransientState.lastError
-                    : nil),
-            forceOverrideCard: account.snapshot == nil,
+            snapshotOverride: option.snapshot,
+            errorOverride: option.error,
+            forceOverrideCard: option.snapshot == nil || option.error != nil,
             accountOverride: AccountInfo(
-                email: account.displayLabel,
+                email: option.displayLabel,
                 plan: nil),
-            planOverride: self.claudeSwapAccountActionLabel(account),
-            sourceLabelOverride: ClaudeSwapAccountProjection.sourceLabel)
+            planOverride: self.claudeSwapAccountActionLabel(option),
+            sourceLabelOverride: option.sourceLabel)
     }
 
-    private func claudeSwapAccountActionLabel(_ account: ProviderAccountUsageSnapshot) -> String? {
-        if account.isActive {
+    private func claudeSwapAccountActionLabel(_ option: ProviderAccountUsageSnapshot) -> String? {
+        if option.isActive {
             return L("Active")
         }
-        if self.store.claudeSwapTransientState.switchingAccountID == account.id {
+        if self.store.claudeSwapTransientState.switchingAccountID == option.id {
             return L("Loading…")
         }
-        guard self.store.claudeSwapTransientState.task == nil, account.canActivate else { return nil }
+        guard self.store.claudeSwapTransientState.task == nil, option.canActivate else { return nil }
         return L("Switch Account...")
     }
 
     private func claudeSwapAccountSwitchAction(
-        _ account: ProviderAccountUsageSnapshot,
+        _ option: ProviderAccountUsageSnapshot,
         menu: NSMenu)
         -> (() -> Void)?
     {
-        guard self.store.claudeSwapTransientState.task == nil, account.canActivate else { return nil }
-        let accountID = account.id
+        guard self.store.claudeSwapTransientState.task == nil, option.canActivate else { return nil }
+        let accountID = option.id
         return { [weak self, weak menu] in
             guard let self else { return }
             self.advanceMenuInteraction(for: menu)

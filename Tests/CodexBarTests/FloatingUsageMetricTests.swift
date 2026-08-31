@@ -4,21 +4,24 @@ import Testing
 
 struct FloatingUsageMetricTests {
     @Test
-    func `sidebar geometry starts outside the screen and reveals inside it`() {
+    func `sidebar geometry leaves a small black tab tucked at the edge and reveals flush to it`() {
         let screen = NSRect(x: 900, y: 1169, width: 2560, height: 1440)
         let size = NSSize(width: 60, height: 432)
         let shown = FloatingSidebarGeometry.shownOrigin(screen: screen, panelSize: size, preferredY: nil)
         let hidden = FloatingSidebarGeometry.hiddenOrigin(screen: screen, shownOrigin: shown)
 
-        #expect(shown.x == 3394)
+        #expect(shown.x == 3400)
         #expect(shown.y == 1673)
-        #expect(hidden.x == screen.maxX)
+        #expect(hidden.x == screen.maxX - FloatingSidebarGeometry.tuckedWidth)
         #expect(hidden.y == shown.y)
         #expect(FloatingSidebarGeometry.pointerTouchesTrailingEdge(
             NSPoint(x: screen.maxX - 1, y: screen.midY),
             screen: screen))
+        #expect(FloatingSidebarGeometry.pointerTouchesTrailingEdge(
+            NSPoint(x: screen.maxX - FloatingSidebarGeometry.tuckedWidth, y: screen.midY),
+            screen: screen))
         #expect(!FloatingSidebarGeometry.pointerTouchesTrailingEdge(
-            NSPoint(x: screen.maxX - 3, y: screen.midY),
+            NSPoint(x: screen.maxX - FloatingSidebarGeometry.tuckedWidth - 1, y: screen.midY),
             screen: screen))
     }
 

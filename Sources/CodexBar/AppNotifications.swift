@@ -14,11 +14,6 @@ final class AppNotifications {
         self.centerProvider = centerProvider
     }
 
-    func requestAuthorizationOnStartup() {
-        guard !Self.isRunningUnderTests else { return }
-        _ = self.ensureAuthorizationTask()
-    }
-
     func post(
         idPrefix: String,
         title: String,

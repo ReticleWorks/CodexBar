@@ -44,7 +44,8 @@ struct CodexBarConfigMigrator {
         self.bindLegacyMoonshotAPIKeyRegion(config: &config, state: &state)
 
         let migrationCompleted = userDefaults.bool(forKey: Self.legacyMigrationCompletedKey)
-        if !migrationCompleted {
+        let legacySecretAccessDisabled = KeychainAccessGate.isExplicitlyDisabled
+        if !migrationCompleted, !legacySecretAccessDisabled {
             // Run once: migrate Keychain/file secrets then clear them. Using a completion flag rather
             // than `existing == nil` ensures a crash between config-save and clearLegacyStores can
             // finish cleanup on the next launch without re-doing the (already-saved) data migration.
@@ -87,6 +88,8 @@ struct CodexBarConfigMigrator {
                 userDefaults.set(true, forKey: Self.legacyMigrationCompletedKey)
             }
         } else if !migrationCompleted {
+            // A user who disabled Keychain access chose a prompt-free startup.
+            // Do not retry retired secret stores on every launch.
             userDefaults.set(true, forKey: Self.legacyMigrationCompletedKey)
         }
 

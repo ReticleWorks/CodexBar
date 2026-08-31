@@ -326,7 +326,12 @@ public struct ProviderFetchPipeline: Sendable {
     }
 
     public func fetch(context: ProviderFetchContext, provider: UsageProvider) async -> ProviderFetchOutcome {
-        let strategies = await self.resolveStrategies(context)
+        let resolvedStrategies = await self.resolveStrategies(context)
+        let strategies = if context.runtime == .app && ProviderInteractionContext.current == .background {
+            resolvedStrategies.filter { $0.kind != .cli && $0.kind != .localProbe }
+        } else {
+            resolvedStrategies
+        }
         var attempts: [ProviderFetchAttempt] = []
         attempts.reserveCapacity(strategies.count)
         var lastAvailableError: Error?

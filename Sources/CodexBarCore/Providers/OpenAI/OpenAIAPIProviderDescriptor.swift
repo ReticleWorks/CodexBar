@@ -41,13 +41,13 @@ public enum OpenAIAPIProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .openai),
                 iconResourceName: "ProviderIcon-codex",
-                color: ProviderColor(red: 0.06, green: 0.51, blue: 0.43),
+                color: ProviderColor(hex: 0xFFFFFF),
                 confettiPalette: [
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0x808080),
                     ProviderColor(hex: 0xFFFFFF),
                 ],
-                widgetColor: ProviderColor(red: 15 / 255, green: 130 / 255, blue: 110 / 255)),
+                widgetColor: ProviderColor(hex: 0xFFFFFF)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." },

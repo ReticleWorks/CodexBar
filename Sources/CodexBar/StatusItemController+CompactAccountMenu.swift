@@ -274,41 +274,12 @@ extension StatusItemController {
                 displayLabel: displayAliases[account.email.lowercased()] ?? account.menuDisplayName,
                 isActive: isActive,
                 canActivate: !isActive,
-                snapshot: Self.snapshotIncludingMonthlyCredit(
+                snapshot: codexPresentationSnapshot(
                     snapshot: accountSnapshot?.snapshot,
                     credits: credits),
                 error: health.label,
                 sourceLabel: accountSnapshot?.sourceLabel)
         }
-    }
-
-    static func snapshotIncludingMonthlyCredit(
-        snapshot: UsageSnapshot?,
-        credits: CreditsSnapshot?) -> UsageSnapshot?
-    {
-        guard let limit = credits?.codexCreditLimit else { return snapshot }
-        let monthly = RateWindow(
-            usedPercent: limit.usedPercent,
-            windowMinutes: nil,
-            resetsAt: limit.resetsAt,
-            resetDescription: nil)
-        guard let snapshot else {
-            return UsageSnapshot(
-                primary: nil,
-                secondary: nil,
-                tertiary: monthly,
-                updatedAt: limit.updatedAt)
-        }
-        if snapshot.tertiary == nil {
-            return snapshot.with(tertiary: monthly)
-        }
-        let extras = (snapshot.extraRateWindows ?? []) + [
-            NamedRateWindow(
-                id: "codex-monthly-credit",
-                title: limit.title,
-                window: monthly),
-        ]
-        return snapshot.with(extraRateWindows: extras)
     }
 
     // MARK: - Expansion state

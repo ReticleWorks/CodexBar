@@ -154,6 +154,22 @@ extension UsageStore {
             }
 
             guard let self else { return }
+            if switchError == nil {
+                let previouslyActiveID = self.claudeSwapAccountSnapshots.first(where: \.isActive)?.id
+                self.claudeSwapAccountSnapshots = self.claudeSwapAccountSnapshots.map { snapshot in
+                    ProviderAccountUsageSnapshot(
+                        id: snapshot.id,
+                        provider: snapshot.provider,
+                        displayLabel: snapshot.displayLabel,
+                        accountEmail: snapshot.accountEmail,
+                        isActive: snapshot.id == accountID,
+                        canActivate: snapshot.id != accountID &&
+                            (snapshot.canActivate || snapshot.id == previouslyActiveID),
+                        snapshot: snapshot.snapshot,
+                        error: snapshot.error,
+                        sourceLabel: snapshot.sourceLabel)
+                }
+            }
             if self.isCurrentClaudeSwapConfiguration(executablePath: executablePath) {
                 // Claude Code owns the ambient credential, so reconcile both
                 // the provider snapshot and the adapter's active-row marker.

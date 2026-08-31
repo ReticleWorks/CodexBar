@@ -695,7 +695,7 @@ extension StatusItemController {
         // the stacked token-account branch below would return before rendering the adapter rows.
         if ClaudeSwapMenuPrecedence.prefersClaudeSwap(
             provider: context.currentProvider,
-            accountCount: self.store.claudeSwapAccountSnapshots.count,
+            accountCount: self.store.accountProjection(for: .claude).subscriptions.count,
             showSingleAccount: self.settings.claudeSwapShowSingleAccount)
         {
             self.addClaudeSwapMenuCards(to: menu, captureMenu: captureMenu ?? menu, context: context)
@@ -1029,6 +1029,7 @@ extension StatusItemController {
             accounts: display.accounts,
             selectedIndex: display.activeIndex,
             width: width,
+            accentColor: Self.accountSwitcherAccentColor(for: display.provider),
             onSelect: { [weak self, weak menu] index -> Task<Void, Never>? in
                 guard let self, let menu else { return nil }
                 guard display.accounts.indices.contains(index) else { return nil }
@@ -1154,6 +1155,9 @@ extension StatusItemController {
     }
 
     private func scheduleOpenMenuRefresh(for menu: NSMenu) {
+        // Menu opening is read-only by default. Provider work starts here only
+        // after the user explicitly enables refresh-on-open in Settings.
+        guard self.settings.refreshAllProvidersOnMenuOpen else { return }
         // Queue refresh work only when visible menu data is missing or stale. Here "stale" means the last
         // provider fetch failed and needs a retry; periodic freshness is handled by the refresh timer.
         // AppKit menu tracking is modal, so starting provider refreshes while it is active can make the menu
@@ -1184,15 +1188,17 @@ extension StatusItemController {
             let enabledProviders = self.store.enabledProvidersForBackgroundWork()
             let visibleProviders = self.delayedRefreshRetryProviders(for: menu)
             let visibleInstanceIDs = visibleProviders.map(\.instanceID)
+            let missingProviders = Set(visibleProviders
+                .filter { !self.store.hasSatisfiedUsageFetch(for: $0) }
+                .map(\.instanceID))
+                .union(self.codexVisibleAccountUsageNeedsRefreshOnMenuOpen() ? [.codex] : [])
             let plan = MenuOpenRefreshPlan.resolve(.init(
                 refreshAllOnOpen: refreshAllOnOpen,
                 enabledProviders: enabledProviders,
                 visibleProviders: visibleInstanceIDs,
                 refreshingProviders: self.store.refreshingProviders,
                 staleProviders: Set(visibleProviders.filter { self.store.isStale(provider: $0) }.map(\.instanceID)),
-                missingProviders: Set(visibleProviders
-                    .filter { !self.store.hasSatisfiedUsageFetch(for: $0) }
-                    .map(\.instanceID))))
+                missingProviders: missingProviders))
             if plan.refreshCodexDashboard {
                 self.deferOpenAIDashboardRefreshUntilMenuCloses(reason: "refresh all")
             }

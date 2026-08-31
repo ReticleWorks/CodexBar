@@ -47,9 +47,9 @@ public enum PerplexityProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .perplexity),
                 iconResourceName: "ProviderIcon-perplexity",
-                color: ProviderColor(red: 32 / 255, green: 178 / 255, blue: 170 / 255),
+                color: ProviderColor(hex: 0x20808D),
                 confettiPalette: [
-                    ProviderColor(hex: 0x016A71),
+                    ProviderColor(hex: 0x20808D),
                     ProviderColor(hex: 0x313131),
                     ProviderColor(hex: 0xFDFBFA),
                 ]),
@@ -82,14 +82,7 @@ public enum PerplexityProviderDescriptor {
     }
 
     private static func resolveSessionToken(environment: [String: String]) -> String? {
-        if let token = PerplexitySettingsReader.sessionToken(environment: environment) {
-            return token
-        }
-        #if os(macOS)
-        return try? PerplexityCookieImporter.importSession().sessionToken
-        #else
-        return nil
-        #endif
+        PerplexitySettingsReader.sessionToken(environment: environment)
     }
 
     private static func fetchPlan() -> ProviderFetchPlan {
@@ -142,15 +135,19 @@ struct PerplexityWebFetchStrategy: ProviderFetchStrategy {
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         guard context.settings?.perplexity?.cookieSource != .off else { return false }
         if context.settings?.perplexity?.cookieSource == .manual {
-            return true
+            return PerplexityCookieHeader.resolveCookieOverride(context: context) != nil
         }
 
-        // Priority order mirrors resolveSessionCookie: manual override → cache → browser import → env var
+        // Priority order mirrors resolution: configured override → cache → environment → browser import.
         if PerplexityCookieHeader.resolveCookieOverride(context: context) != nil {
             return true
         }
 
         if CookieHeaderCache.load(provider: .perplexity) != nil {
+            return true
+        }
+
+        if PerplexitySettingsReader.sessionToken(environment: context.env) != nil {
             return true
         }
 
@@ -161,10 +158,6 @@ struct PerplexityWebFetchStrategy: ProviderFetchStrategy {
             }
         }
         #endif
-
-        if PerplexitySettingsReader.sessionToken(environment: context.env) != nil {
-            return true
-        }
 
         return false
     }
@@ -230,22 +223,20 @@ struct PerplexityWebFetchStrategy: ProviderFetchStrategy {
             }
         }
 
-        cookies.append(contentsOf: self.resolveSessionCookiesFromBrowserOrEnv(context: context))
+        if let environmentCookie = PerplexitySettingsReader.sessionCookieOverride(environment: context.env) {
+            cookies.append(ResolvedSessionCookie(value: environmentCookie, source: .environment))
+            return self.deduplicatedSessionCookies(cookies)
+        }
+
+        cookies.append(contentsOf: self.resolveSessionCookiesFromBrowser(context: context))
         return self.deduplicatedSessionCookies(cookies)
     }
 
-    private func resolveSessionCookiesFromBrowserOrEnv(
-        context: ProviderFetchContext,
-        preferEnvironment: Bool = false) -> [ResolvedSessionCookie]
+    private func resolveSessionCookiesFromBrowser(
+        context: ProviderFetchContext) -> [ResolvedSessionCookie]
     {
         guard context.settings?.perplexity?.cookieSource != .off else { return [] }
         var cookies: [ResolvedSessionCookie] = []
-
-        if preferEnvironment,
-           let cookie = PerplexitySettingsReader.sessionCookieOverride(environment: context.env)
-        {
-            cookies.append(ResolvedSessionCookie(value: cookie, source: .environment))
-        }
 
         // Try browser cookie import when auto mode is enabled
         #if os(macOS)
@@ -260,12 +251,6 @@ struct PerplexityWebFetchStrategy: ProviderFetchStrategy {
         }
         #endif
 
-        // Fall back to environment
-        if !preferEnvironment,
-           let cookie = PerplexitySettingsReader.sessionCookieOverride(environment: context.env)
-        {
-            cookies.append(ResolvedSessionCookie(value: cookie, source: .environment))
-        }
         return self.deduplicatedSessionCookies(cookies)
     }
 

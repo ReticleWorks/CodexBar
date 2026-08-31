@@ -75,6 +75,50 @@ struct ClaudeSwapAccountProjectionTests {
     }
 
     @Test
+    func `isolated list preserves the previously selected account`() throws {
+        let previous = ClaudeSwapAccountProjection.accountSnapshots(
+            from: ClaudeSwapAccountList(
+                activeAccountNumber: 2,
+                accounts: [
+                    ClaudeSwapAccountRow(
+                        number: 1,
+                        email: "one@example.com",
+                        isActive: false,
+                        usageStatus: .ok,
+                        fiveHour: nil,
+                        sevenDay: nil),
+                    ClaudeSwapAccountRow(
+                        number: 2,
+                        email: "two@example.com",
+                        isActive: true,
+                        usageStatus: .ok,
+                        fiveHour: nil,
+                        sevenDay: nil),
+                ]),
+            now: self.now)
+        let isolated = ClaudeSwapAccountList(
+            activeAccountNumber: nil,
+            accounts: previous.map { account in
+                ClaudeSwapAccountRow(
+                    number: Int(account.id.opaqueID) ?? 0,
+                    email: account.accountEmail ?? "",
+                    isActive: false,
+                    usageStatus: .ok,
+                    fiveHour: nil,
+                    sevenDay: nil)
+            })
+
+        let snapshots = ClaudeSwapAccountProjection.accountSnapshots(
+            from: isolated,
+            previousAccounts: previous,
+            now: self.now)
+
+        #expect(snapshots.first?.id.opaqueID == "2")
+        #expect(snapshots.first?.isActive == true)
+        #expect(snapshots.first?.canActivate == false)
+    }
+
+    @Test
     func `maps sentinel statuses to per account errors without usage`() throws {
         let rows: [(ClaudeSwapUsageStatus, String)] = [
             (.tokenExpired, "Token expired"),

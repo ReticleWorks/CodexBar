@@ -65,6 +65,9 @@ struct CodexBarApp: App {
             ])
 
         KeychainAccessGate.isDisabled = UserDefaults.standard.bool(forKey: "debugDisableKeychainAccess")
+        if Bundle.main.object(forInfoDictionaryKey: AppGroupSupport.disableAppGroupInfoKey) as? Bool == true {
+            KeychainAccessGate.forceDisabledForProcess(reason: "local-build")
+        }
         KeychainPromptCoordinator.install()
         if MainThreadHangWatchdog.isEnabledForCurrentProcess {
             MainThreadHangWatchdog.shared.start()
@@ -443,8 +446,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: dependencies.store,
             settings: dependencies.settings,
             openProvider: { [weak self] provider in
-                self?.settings?.selectedMenuProvider = provider.instanceID
-                self?.statusController?.openMenuFromShortcut()
+                self?.statusController?.openMenu(for: provider)
+            },
+            openSettings: { [weak self] in
+                self?.openSettings(pane: nil)
             })
     }
 
@@ -477,7 +482,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await Task.yield()
             guard let settings = self?.settings else { return }
             AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
-            AppNotifications.shared.requestAuthorizationOnStartup()
             // A persisted non-USD choice opts into the daily exchange-rate refresh. The service
             // returns before networking for the default USD setting and Auto.
             guard CurrencyExchange.requiresLiveRates(

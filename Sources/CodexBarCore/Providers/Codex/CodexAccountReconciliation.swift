@@ -14,6 +14,19 @@ public struct CodexResolvedActiveSource: Equatable, Sendable {
     }
 }
 
+/// Describes whether account sources were read far enough to make removal decisions.
+///
+/// An incomplete pass must not be treated as an authoritative reduced account set. Callers may retain
+/// last-known-good rows until a later complete pass proves that an account is gone.
+public enum CodexAccountReconciliationAuthority: Equatable, Sendable {
+    case complete
+    case incomplete
+
+    public var isComplete: Bool {
+        self == .complete
+    }
+}
+
 public enum CodexActiveSourceResolver {
     public static func resolve(from snapshot: CodexAccountReconciliationSnapshot) -> CodexResolvedActiveSource {
         let persistedSource = snapshot.activeSource
@@ -97,6 +110,7 @@ public struct CodexAccountReconciliationSnapshot: Equatable, Sendable {
     public let matchingStoredAccountForLiveSystemAccount: ManagedCodexAccount?
     public let activeSource: CodexActiveSource
     public let hasUnreadableAddedAccountStore: Bool
+    public let discoveryAuthority: CodexAccountReconciliationAuthority
     public let storedAccountRuntimeIdentities: [UUID: CodexIdentity]
     public let storedAccountRuntimeEmails: [UUID: String]
 
@@ -109,6 +123,7 @@ public struct CodexAccountReconciliationSnapshot: Equatable, Sendable {
         matchingStoredAccountForLiveSystemAccount: ManagedCodexAccount?,
         activeSource: CodexActiveSource,
         hasUnreadableAddedAccountStore: Bool,
+        discoveryAuthority: CodexAccountReconciliationAuthority? = nil,
         storedAccountRuntimeIdentities: [UUID: CodexIdentity] = [:],
         storedAccountRuntimeEmails: [UUID: String] = [:])
     {
@@ -121,6 +136,8 @@ public struct CodexAccountReconciliationSnapshot: Equatable, Sendable {
         self.matchingStoredAccountForLiveSystemAccount = matchingStoredAccountForLiveSystemAccount
         self.activeSource = activeSource
         self.hasUnreadableAddedAccountStore = hasUnreadableAddedAccountStore
+        self.discoveryAuthority = discoveryAuthority
+            ?? (hasUnreadableAddedAccountStore ? .incomplete : .complete)
         self.storedAccountRuntimeIdentities = storedAccountRuntimeIdentities
         self.storedAccountRuntimeEmails = storedAccountRuntimeEmails
     }
@@ -135,6 +152,7 @@ public struct CodexAccountReconciliationSnapshot: Equatable, Sendable {
             == rhs.matchingStoredAccountForLiveSystemAccount.map(AccountIdentity.init)
             && lhs.activeSource == rhs.activeSource
             && lhs.hasUnreadableAddedAccountStore == rhs.hasUnreadableAddedAccountStore
+            && lhs.discoveryAuthority == rhs.discoveryAuthority
             && lhs.storedAccountRuntimeIdentities == rhs.storedAccountRuntimeIdentities
             && lhs.storedAccountRuntimeEmails == rhs.storedAccountRuntimeEmails
     }
@@ -264,17 +282,31 @@ public struct DefaultCodexAccountReconciler: Sendable {
                 }
             }
 
+            let reconciledProfileHomeAccounts = self.profileHomeAccounts(
+                profileHomeAccounts,
+                excludingManagedAccounts: accounts.accounts)
+            var excludedProfileHomePaths = Set(accounts.accounts.compactMap {
+                CodexHomeScope.normalizedHomePath($0.managedHomePath)
+            })
+            if let livePath = liveSystemAccount.flatMap({
+                CodexHomeScope.normalizedHomePath($0.codexHomePath)
+            }) {
+                excludedProfileHomePaths.insert(livePath)
+            }
+            let profileHomeDiscoveryComplete = self.profileHomeDiscoveryIsComplete(
+                observedAccounts: reconciledProfileHomeAccounts,
+                excludedPaths: excludedProfileHomePaths)
+
             return CodexAccountReconciliationSnapshot(
                 storedAccounts: accounts.accounts,
                 activeStoredAccount: activeStoredAccount,
                 liveSystemAccount: liveSystemAccount,
-                profileHomeAccounts: self.profileHomeAccounts(
-                    profileHomeAccounts,
-                    excludingManagedAccounts: accounts.accounts),
+                profileHomeAccounts: reconciledProfileHomeAccounts,
                 profileHomePaths: self.profileHomePaths,
                 matchingStoredAccountForLiveSystemAccount: matchingStoredAccountForLiveSystemAccount,
                 activeSource: self.activeSource,
                 hasUnreadableAddedAccountStore: false,
+                discoveryAuthority: profileHomeDiscoveryComplete ? .complete : .incomplete,
                 storedAccountRuntimeIdentities: runtimeAccounts.mapValues(\.identity),
                 storedAccountRuntimeEmails: runtimeAccounts.mapValues(\.email))
         } catch {
@@ -286,8 +318,20 @@ public struct DefaultCodexAccountReconciler: Sendable {
                 profileHomePaths: self.profileHomePaths,
                 matchingStoredAccountForLiveSystemAccount: nil,
                 activeSource: self.activeSource,
-                hasUnreadableAddedAccountStore: true)
+                hasUnreadableAddedAccountStore: true,
+                discoveryAuthority: .incomplete)
         }
+    }
+
+    private func profileHomeDiscoveryIsComplete(
+        observedAccounts: [ObservedSystemCodexAccount],
+        excludedPaths: Set<String>) -> Bool
+    {
+        let expectedPaths = Set(self.profileHomePaths.filter { !excludedPaths.contains($0) })
+        let observedPaths = Set(observedAccounts.compactMap {
+            CodexHomeScope.normalizedHomePath($0.codexHomePath)
+        })
+        return expectedPaths.isSubset(of: observedPaths)
     }
 
     private func loadProfileHomeAccounts(

@@ -324,6 +324,7 @@ extension UsageStore {
             error: row.error,
             sourceLabel: row.sourceLabel,
             credits: self.credits)
+        guard self.settings.codexAccountReconciliationSnapshot.discoveryAuthority.isComplete else { return }
         self.codexAccountUsageSnapshotStore?.store(self.codexAccountSnapshots)
     }
 

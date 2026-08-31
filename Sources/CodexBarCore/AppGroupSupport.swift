@@ -88,7 +88,17 @@ public enum AppGroupSupport {
         guard Bundle.main.object(forInfoDictionaryKey: self.disableAppGroupInfoKey) as? Bool != true else {
             return nil
         }
-        return fileManager.containerURL(forSecurityApplicationGroupIdentifier: self.currentGroupID(for: bundleID))
+        let signedTeamID = self.codeSignatureTeamID(bundleURL: Bundle.main.bundleURL)
+        guard let signedTeamID else { return nil }
+        let groupID = self.currentGroupID(teamID: signedTeamID, bundleID: bundleID)
+        guard self.canUseAppGroup(
+            groupID: groupID,
+            signedTeamID: signedTeamID,
+            signedGroups: self.signedApplicationGroups(bundleURL: Bundle.main.bundleURL))
+        else {
+            return nil
+        }
+        return fileManager.containerURL(forSecurityApplicationGroupIdentifier: groupID)
         #else
         nil
         #endif
@@ -246,6 +256,49 @@ public enum AppGroupSupport {
         #else
         _ = bundleURL
         return nil
+        #endif
+    }
+
+    static func canUseAppGroup(
+        groupID: String,
+        signedTeamID: String?,
+        signedGroups: Set<String>)
+        -> Bool
+    {
+        guard let signedTeamID, !signedTeamID.isEmpty,
+              groupID.hasPrefix("\(signedTeamID).")
+        else {
+            return false
+        }
+        return signedGroups.contains(groupID)
+    }
+
+    private static func signedApplicationGroups(bundleURL: URL?) -> Set<String> {
+        #if os(macOS)
+        guard let bundleURL else { return [] }
+
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(bundleURL as CFURL, SecCSFlags(), &staticCode) == errSecSuccess,
+              let code = staticCode
+        else {
+            return []
+        }
+
+        var infoCF: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            code,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &infoCF) == errSecSuccess,
+            let info = infoCF as? [String: Any],
+            let entitlements = info[kSecCodeInfoEntitlementsDict as String] as? [String: Any],
+            let groups = entitlements["com.apple.security.application-groups"] as? [String]
+        else {
+            return []
+        }
+        return Set(groups)
+        #else
+        _ = bundleURL
+        return []
         #endif
     }
 }

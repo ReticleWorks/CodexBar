@@ -68,7 +68,7 @@ public enum CodexProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .codex),
                 iconResourceName: "ProviderIcon-codex",
-                color: ProviderColor(red: 73 / 255, green: 163 / 255, blue: 176 / 255),
+                color: ProviderColor(hex: 0xFFFFFF),
                 confettiPalette: [
                     ProviderColor(hex: 0x736BD4),
                     ProviderColor(hex: 0x97A9F7),

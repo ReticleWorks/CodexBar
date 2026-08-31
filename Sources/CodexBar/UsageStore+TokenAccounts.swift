@@ -173,8 +173,7 @@ extension UsageStore {
     func shouldFetchAllTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) -> Bool {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return false }
         guard self.settings.effectiveSelectedTokenAccount(for: provider) != nil else { return false }
-        // Selectors and provider-specific API sections both render cached rows for every configured
-        // account. Hydrate them regardless of the card layout.
+        guard provider == .claude || provider == .openai else { return false }
         return accounts.count > 1
     }
 
@@ -210,13 +209,16 @@ extension UsageStore {
     }
 
     func refreshCodexVisibleAccountsForMenu(generation: UInt64? = nil) async {
-        let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
+        let refreshInput = self.freshCodexVisibleAccountProjectionAndAuthorityForAccountRefresh()
+        let projection = refreshInput.projection
         let accounts = self.limitedCodexVisibleAccounts(
             projection.visibleAccounts,
             snapshots: self.codexAccountSnapshots,
             activeVisibleAccountID: projection.activeVisibleAccountID)
         guard accounts.count > 1 else {
-            self.codexAccountSnapshots = []
+            if refreshInput.authority.isComplete {
+                self.codexAccountSnapshots = []
+            }
             return
         }
         let managedAccountIDsWithReadableAuthAtStart = self.codexManagedAccountIDsWithReadableAuth()
@@ -246,8 +248,9 @@ extension UsageStore {
         guard !Task.isCancelled,
               self.isCurrentProviderRefreshGeneration(.codex, generation: generation)
         else { return }
-        let currentProjection = self.freshCodexVisibleAccountProjectionForAccountRefresh(
+        let currentRefreshInput = self.freshCodexVisibleAccountProjectionAndAuthorityForAccountRefresh(
             requireLiveManagedAuthFor: managedAccountIDsWithReadableAuthAtStart)
+        let currentProjection = currentRefreshInput.projection
         for result in results {
             let account = result.account
             let priorSnapshot = Self.codexPriorAccountSnapshot(
@@ -297,8 +300,17 @@ extension UsageStore {
         }
 
         let currentSnapshots = Self.codexAccountSnapshots(snapshots, reconciledWith: currentProjection)
-        self.codexAccountSnapshots = currentSnapshots
-        self.codexAccountUsageSnapshotStore?.store(currentSnapshots)
+        let publishedSnapshots = currentRefreshInput.authority.isComplete
+            ? currentSnapshots
+            : Self.codexAccountSnapshotsRetainingPriorRowsMissingFromProjection(
+                currentSnapshots,
+                priorSnapshots: priorSnapshots)
+        self.codexAccountSnapshots = publishedSnapshots
+        // An incomplete discovery pass cannot prove that an omitted account was removed. Do not overwrite the
+        // disk cache with a partial set; the next complete pass can reconcile and prune it safely.
+        if currentRefreshInput.authority.isComplete {
+            self.codexAccountUsageSnapshotStore?.store(currentSnapshots)
+        }
 
         let selectionStillMatches = self.codexVisibleSelectionStillMatches(
             originalVisibleAccountID: originalVisibleAccountID,
@@ -311,7 +323,7 @@ extension UsageStore {
             }
             if selectionStillMatches,
                let selectedID = currentProjection.activeVisibleAccountID,
-               let preserved = currentSnapshots.first(where: { $0.id == selectedID }),
+               let preserved = publishedSnapshots.first(where: { $0.id == selectedID }),
                let snapshot = preserved.snapshot
             {
                 self.snapshots[.codex] = snapshot
@@ -393,14 +405,36 @@ extension UsageStore {
     private func freshCodexVisibleAccountProjectionForAccountRefresh(
         requireLiveManagedAuthFor accountIDs: Set<UUID> = []) -> CodexVisibleAccountProjection
     {
+        self.freshCodexVisibleAccountProjectionAndAuthorityForAccountRefresh(
+            requireLiveManagedAuthFor: accountIDs).projection
+    }
+
+    private func freshCodexVisibleAccountProjectionAndAuthorityForAccountRefresh(
+        requireLiveManagedAuthFor accountIDs: Set<UUID> = [])
+        -> (projection: CodexVisibleAccountProjection, authority: CodexAccountReconciliationAuthority)
+    {
         // Auth files can change while account fetches are in flight, so account refreshes bypass the
         // short-lived reconciliation cache used for normal menu rendering and stale-result guards.
         self.settings.invalidateCodexAccountReconciliationSnapshotCache()
         let snapshot = self.settings.codexAccountReconciliationSnapshot
-        return Self.codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
-            CodexVisibleAccountProjection.make(from: snapshot),
-            snapshot: snapshot,
-            requireLiveManagedAuthFor: accountIDs)
+        return (
+            Self.codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
+                CodexVisibleAccountProjection.make(from: snapshot),
+                snapshot: snapshot,
+                requireLiveManagedAuthFor: accountIDs),
+            snapshot.discoveryAuthority)
+    }
+
+    private nonisolated static func codexAccountSnapshotsRetainingPriorRowsMissingFromProjection(
+        _ currentSnapshots: [CodexAccountUsageSnapshot],
+        priorSnapshots: [CodexAccountUsageSnapshot]) -> [CodexAccountUsageSnapshot]
+    {
+        var result = currentSnapshots
+        var currentIDs = Set(currentSnapshots.map(\.id))
+        for prior in priorSnapshots where currentIDs.insert(prior.id).inserted {
+            result.append(prior)
+        }
+        return result
     }
 
     private func codexManagedAccountIDsWithReadableAuth() -> Set<UUID> {
@@ -1405,8 +1439,17 @@ extension UsageStore {
     }
 
     static func shouldPreserveCodexAccountSnapshotOnFailure(_ message: String) -> Bool {
-        guard CodexAccountHealth.status(forError: message) == .unavailable else { return false }
         let normalized = message.lowercased()
+        // A rejected credential is an account-health change, not proof that the last verified quota
+        // vanished. Keep that row visible as stale so re-authentication never turns a configured
+        // account into a blank selector entry.
+        if normalized.contains("oauth token expired or invalid") ||
+            normalized.contains("token_invalidated") ||
+            normalized.contains("token has been invalidated")
+        {
+            return true
+        }
+        guard CodexAccountHealth.status(forError: message) == .unavailable else { return false }
         return normalized.contains("network") || normalized.contains("internet connection")
             || normalized.contains("offline") || normalized.contains("timed out")
             || normalized.contains("timeout") || normalized.contains("connection was lost")

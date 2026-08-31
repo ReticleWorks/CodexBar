@@ -36,6 +36,10 @@ CONF=${1:-release}
 ALLOW_LLDB=${CODEXBAR_ALLOW_LLDB:-0}
 SIGNING_MODE=
 resolve_package_signing_mode
+SKIP_WIDGET_EXTENSION="${CODEXBAR_SKIP_WIDGET_EXTENSION:-0}"
+if [[ "$SIGNING_MODE" != "identity" ]]; then
+  SKIP_WIDGET_EXTENSION=1
+fi
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 LOWER_CONF=$(printf "%s" "$CONF" | tr '[:upper:]' '[:lower:]')
@@ -225,6 +229,7 @@ if [[ "$LOWER_CONF" == "debug" ]]; then
   AUTO_CHECKS=false
 fi
 if [[ "$SIGNING_MODE" == "adhoc" || "$SIGNING_MODE" == "local-identity" ]]; then
+  BUNDLE_ID="com.steipete.codexbar.local"
   FEED_URL=""
   AUTO_CHECKS=false
 fi
@@ -325,7 +330,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CodexBuildTimestamp</key><string>${BUILD_TIMESTAMP}</string>
     <key>CodexGitCommit</key><string>${GIT_COMMIT}</string>
     <key>CodexBarTeamID</key><string>${APP_TEAM_ID}</string>
-    $(if [[ "$SIGNING_MODE" == "local-identity" ]]; then echo "    <key>CodexBarDisableAppGroup</key><true/>"; fi)
+    $(if [[ "$SIGNING_MODE" != "identity" ]]; then echo "    <key>CodexBarDisableAppGroup</key><true/>"; fi)
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
@@ -510,7 +515,7 @@ strip_release_binary "$APP/Contents/Helpers/CodexBarCLI"
 # Watchdog helper: ensures `claude` probes die when CodexBar crashes/gets killed.
 install_binary "CodexBarClaudeWatchdog" "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
 strip_release_binary "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
-if [[ "${CODEXBAR_SKIP_WIDGET_EXTENSION:-0}" != "1" ]]; then
+if [[ "$SKIP_WIDGET_EXTENSION" != "1" ]]; then
   install_widget_extension
   strip_release_binary "$APP/Contents/PlugIns/CodexBarWidget.appex/Contents/MacOS/CodexBarWidget"
 fi
@@ -540,6 +545,13 @@ elif [[ "$ALLOW_LLDB" == "1" ]]; then
 else
   CODESIGN_ID="${APP_IDENTITY:-Developer ID Application: Peter Steinberger (Y5PE65HELJ)}"
   CODESIGN_ARGS=(--force --timestamp --options runtime --sign "$CODESIGN_ID")
+fi
+if [[ -n "${CODEXBAR_SIGNING_KEYCHAIN:-}" ]]; then
+  if [[ ! -f "$CODEXBAR_SIGNING_KEYCHAIN" ]]; then
+    echo "ERROR: CODEXBAR_SIGNING_KEYCHAIN does not exist: $CODEXBAR_SIGNING_KEYCHAIN" >&2
+    exit 1
+  fi
+  CODESIGN_ARGS+=(--keychain "$CODEXBAR_SIGNING_KEYCHAIN")
 fi
 function resign() { codesign "${CODESIGN_ARGS[@]}" "$1"; }
 # Validate Sparkle's nested layout before signing so framework layout drift fails clearly.
@@ -623,9 +635,9 @@ if [[ "$EMBED_PROVISIONING_PROFILE" == "1" ]]; then
   cp "$PROVISIONING_PROFILE_SOURCE" "$APP/Contents/embedded.provisionprofile"
 fi
 
-# Finally sign the app bundle itself. A host-local identity has no Apple team,
-# so it must not carry restricted Developer ID entitlements.
-if [[ "$SIGNING_MODE" == "local-identity" ]]; then
+# Finally sign the app bundle itself. Local and ad hoc signatures have no Apple
+# team, so they must not carry restricted Developer ID entitlements.
+if [[ "$SIGNING_MODE" != "identity" ]]; then
   codesign "${CODESIGN_ARGS[@]}" "$APP"
 else
   codesign "${CODESIGN_ARGS[@]}" \

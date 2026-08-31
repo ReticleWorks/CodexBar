@@ -6,6 +6,8 @@ struct MenuBarPane: View {
     private static let maxOverviewProviders = SettingsStore.mergedOverviewProviderLimit
 
     @State private var isOverviewProviderPopoverPresented = false
+    @AppStorage("floatingSidebarHideExhaustedAccounts")
+    private var floatingSidebarHideExhaustedAccounts = false
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
 
@@ -85,6 +87,13 @@ struct MenuBarPane: View {
                         "Floating usage sidebar",
                         subtitle: "Reveal an auto-hidden usage pill at the right edge of every display.")
                 }
+
+                Toggle(isOn: self.$floatingSidebarHideExhaustedAccounts) {
+                    SettingsRowLabel(
+                        "Skip exhausted sidebar accounts",
+                        subtitle: "Automatically show the next account while a selected account is at 100% usage.")
+                }
+                .disabled(!self.settings.floatingSidebarEnabled)
             } header: {
                 Text("Desktop")
             }

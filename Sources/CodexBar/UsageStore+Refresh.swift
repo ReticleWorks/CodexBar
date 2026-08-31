@@ -358,8 +358,6 @@ extension UsageStore {
         if provider == .codex, self.shouldFetchAllCodexVisibleAccounts() {
             await self.refreshCodexVisibleAccountsForMenu(generation: generation)
             return nil
-        } else if provider == .codex {
-            self.codexAccountSnapshots = []
         }
 
         if provider == .kilo, self.shouldFanOutKiloScopes() {
@@ -927,6 +925,10 @@ extension UsageStore {
                   accountEmail: currentGuard.accountKey),
               currentOwnerKey == expectedOwnerKey
         else { return }
+
+        // A reduced discovery result cannot prove that previously persisted accounts were removed. Keep the
+        // disk cache intact until a complete account pass can publish the single-account replacement.
+        guard self.settings.codexAccountReconciliationSnapshot.discoveryAuthority.isComplete else { return }
 
         let visibleAccounts = self.freshCodexVisibleAccountsForSnapshotHydration()
         let activeMatches = visibleAccounts.filter {
@@ -1520,21 +1522,19 @@ extension UsageStore {
 
     nonisolated static func isPreservableNetworkTransportError(_ error: Error) -> Bool {
         let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorTimedOut,
-                 NSURLErrorCancelled,
-                 NSURLErrorNetworkConnectionLost,
-                 NSURLErrorNotConnectedToInternet,
-                 NSURLErrorCannotFindHost,
-                 NSURLErrorCannotConnectToHost,
-                 NSURLErrorDNSLookupFailed:
-                return true
-            default:
-                break
-            }
+        guard nsError.domain == NSURLErrorDomain else { return false }
+        switch nsError.code {
+        case NSURLErrorTimedOut,
+             NSURLErrorCancelled,
+             NSURLErrorNetworkConnectionLost,
+             NSURLErrorNotConnectedToInternet,
+             NSURLErrorCannotFindHost,
+             NSURLErrorCannotConnectToHost,
+             NSURLErrorDNSLookupFailed:
+            return true
+        default:
+            return false
         }
-        return self.isWrappedNetworkTransportError(error)
     }
 
     static func startupConnectivityRetryDelay(forAttempt attempt: Int) -> TimeInterval? {
@@ -1563,13 +1563,8 @@ extension UsageStore {
             }
         }
 
-        return self.isWrappedNetworkTransportError(error)
-    }
-
-    private nonisolated static func isWrappedNetworkTransportError(_ error: Error) -> Bool {
         let message = error.localizedDescription.lowercased()
-        return (message.contains("nsurlerrordomain") && message.contains("-1001")) ||
-            message.contains("timed out") ||
+        return message.contains("timed out") ||
             message.contains("timeout") ||
             message.contains("network connection was lost") ||
             message.contains("not connected to the internet") ||

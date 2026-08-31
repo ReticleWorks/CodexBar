@@ -43,9 +43,9 @@ public enum DeepInfraProviderDescriptor {
             branding: ProviderBranding(
                 iconStyle: .init(provider: .deepinfra),
                 iconResourceName: "ProviderIcon-deepinfra",
-                color: ProviderColor(red: 42 / 255, green: 50 / 255, blue: 117 / 255),
+        color: ProviderColor(red: 76 / 255, green: 89 / 255, blue: 211 / 255),
                 confettiPalette: [
-                    ProviderColor(hex: 0x2A3275),
+                    ProviderColor(hex: 0x4C59D3),
                     ProviderColor(hex: 0x747FDE),
                     ProviderColor(hex: 0xFFFFFF),
                 ]),
