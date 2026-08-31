@@ -60,6 +60,7 @@ struct FloatingUsagePillView: View {
     @AppStorage("floatingSidebarCodexAccountID") private var selectedCodexAccountID = ""
     @AppStorage("floatingSidebarClaudeAccountID") private var selectedClaudeAccountID = ""
     @AppStorage("floatingSidebarHideExhaustedAccounts") private var hideExhaustedAccounts = false
+    @AppStorage("selectedMenuProvider") private var selectedProviderID = ""
     @State private var isSettingsHovered = false
 
     var body: some View {
@@ -141,13 +142,16 @@ struct FloatingUsagePillView: View {
         case .claude: self.selectedClaudeAccountID
         default: ""
         }
-        let option = options.first(where: { $0.id.floatingSidebarSelectionKey == selectedID })
-            ?? options.first(where: \.isActive)
-            ?? options.first
+        let usableOptions = options.filter { $0.snapshot != nil }
+        let selectableOptions = usableOptions.isEmpty ? options : usableOptions
+        let option = selectableOptions.first(where: { $0.id.floatingSidebarSelectionKey == selectedID })
+            ?? selectableOptions.first(where: \.isActive)
+            ?? selectableOptions.first
         return FloatingUsagePillItem(
             provider: provider,
             snapshot: option == nil ? self.fallbackSnapshot(for: provider) : option?.snapshot,
-            accentColor: self.settings.accentColor(for: provider),
+            isSelected: self.selectedProviderID == provider.instanceID.rawValue,
+            accentColor: ProviderAccentPalette.color(for: provider),
             showsUsed: self.showsUsed(for: provider),
             hidePersonalInfo: self.settings.hidePersonalInfo,
             accountDisplayLabel: option?.displayLabel,
@@ -159,7 +163,10 @@ struct FloatingUsagePillView: View {
                 || self.store.refreshingProviders.contains(provider.instanceID),
             presentation: self.presentation,
             selectAccount: { id in self.selectAccount(id, for: provider) },
-            openProvider: self.openProvider)
+            openProvider: { selected in
+                self.selectedProviderID = selected.instanceID.rawValue
+                self.openProvider(selected)
+            })
             .frame(height: FloatingSidebarLayout.providerRowHeight)
     }
 
@@ -262,6 +269,7 @@ private enum FloatingSidebarStatusColor {
 private struct FloatingUsagePillItem: View {
     let provider: UsageProvider
     let snapshot: UsageSnapshot?
+    let isSelected: Bool
     let accentColor: ProviderColor
     let showsUsed: Bool
     let hidePersonalInfo: Bool
@@ -319,10 +327,22 @@ private struct FloatingUsagePillItem: View {
                             available: false)
                     }
                 }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(self.brandColor.opacity(self.isSelected ? 0.18 : (self.isHovered ? 0.08 : 0)))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(self.brandColor.opacity(self.isSelected ? 0.72 : 0), lineWidth: 1)
+                }
             }
             .buttonStyle(.plain)
             .help(self.helpText)
             .accessibilityLabel(self.helpText)
+            .accessibilityHint("Opens \(self.metadata.displayName) details")
+            .accessibilityAddTraits(self.isSelected ? .isSelected : [])
 
             if self.accountOptions.count > 1 {
                 Button {
@@ -331,14 +351,16 @@ private struct FloatingUsagePillItem: View {
                     Image(systemName: "chevron.down.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(self.brandColor, Color.black.opacity(0.9))
-                        .frame(width: 18, height: 18)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.black.opacity(0.9)))
                 }
                 .buttonStyle(.plain)
-                .offset(x: 8, y: -4)
+                .offset(y: -4)
                 .help("Choose \(self.metadata.displayName) account")
                 .accessibilityLabel("Choose \(self.metadata.displayName) account")
-                .popover(isPresented: self.$isAccountPickerPresented, arrowEdge: .trailing) {
+                .popover(isPresented: self.$isAccountPickerPresented, arrowEdge: .leading) {
                     self.accountPicker
+                        .preferredColorScheme(.dark)
                 }
             }
         }
@@ -460,7 +482,7 @@ private struct FloatingUsagePillItem: View {
 
     private var accountPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("\(self.metadata.displayName) accounts")
+            Text("Choose \(self.metadata.displayName) account")
                 .font(.system(size: 12, weight: .semibold))
                 .padding(.horizontal, 6)
                 .padding(.bottom, 2)
@@ -498,17 +520,19 @@ private struct FloatingUsagePillItem: View {
                 .padding(.top, 3)
 
             ForEach(options) { option in
+                let isSelected = option.id.floatingSidebarSelectionKey == self.selectedAccountID
                 Button {
                     self.selectAccount(option.id.floatingSidebarSelectionKey)
                     self.isAccountPickerPresented = false
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: option.id.floatingSidebarSelectionKey == self.selectedAccountID
+                        Image(systemName: isSelected
                             ? "checkmark.circle.fill"
                             : "circle")
-                            .foregroundStyle(option.id.floatingSidebarSelectionKey == self.selectedAccountID
+                            .foregroundStyle(isSelected
                                 ? self.brandColor
                                 : Color.secondary)
+                            .accessibilityHidden(true)
                         Text(self.hidePersonalInfo ? "Account" : option.displayLabel)
                             .lineLimit(1)
                         Spacer(minLength: 8)
@@ -519,6 +543,10 @@ private struct FloatingUsagePillItem: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
+                .accessibilityLabel(self.hidePersonalInfo ? "Account" : option.displayLabel)
+                .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                .accessibilityHint("Shows this account in the sidebar")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
     }
@@ -535,16 +563,17 @@ private struct FloatingUsagePillItem: View {
                 .monospacedDigit()
                 .foregroundStyle(option.error == nil ? Color.secondary : Color.orange)
                 .frame(width: 48, alignment: .trailing)
-        } else if option.error != nil {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 10, weight: .semibold))
+        } else if let error = option.error {
+            Text(error)
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.orange)
-                .frame(width: 48, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: 72, alignment: .trailing)
         } else {
-            Text("—")
-                .font(.system(size: 11, weight: .semibold))
+            Text("Loading")
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.tertiary)
-                .frame(width: 48, alignment: .trailing)
+                .frame(width: 72, alignment: .trailing)
         }
     }
 
