@@ -968,9 +968,40 @@ enum CostUsageScanner {
             if let cached = self.cache[projectPath] {
                 return cached
             }
+            let standardizedPath = Self.standardizedAbsolutePath(projectPath) ?? projectPath
+            guard Self.isOnStartupVolume(standardizedPath) else {
+                self.cache[projectPath] = projectPath
+                return projectPath
+            }
             let resolved = self.resolveCanonicalProjectPath(projectPath) ?? projectPath
             self.cache[projectPath] = resolved
             return resolved
+        }
+
+        private static func isOnStartupVolume(_ path: String) -> Bool {
+            #if canImport(Darwin)
+            var mounts: UnsafeMutablePointer<statfs>?
+            let count = getmntinfo(&mounts, MNT_NOWAIT)
+            guard count > 0, let mounts else { return false }
+
+            var bestMatch: (length: Int, isStartupVolume: Bool)?
+            for index in 0..<Int(count) {
+                let entry = mounts[index]
+                let mountPath = withUnsafePointer(to: entry.f_mntonname) { pointer in
+                    pointer.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) {
+                        String(cString: $0)
+                    }
+                }
+                let matches = path == mountPath || mountPath == "/" || path.hasPrefix(mountPath + "/")
+                guard matches, mountPath.count > (bestMatch?.length ?? -1) else { continue }
+                bestMatch = (
+                    mountPath.count,
+                    mountPath == "/" || mountPath == "/System/Volumes/Data")
+            }
+            return bestMatch?.isStartupVolume == true
+            #else
+            return true
+            #endif
         }
 
         private func resolveCanonicalProjectPath(_ projectPath: String) -> String? {
