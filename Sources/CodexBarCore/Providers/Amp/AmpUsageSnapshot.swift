@@ -129,14 +129,22 @@ extension AmpUsageSnapshot {
             loginMethod: self.subscription?.plan ?? (primary == nil ? "Amp" : "Amp Free"))
 
         var detailRows: [ProviderDetailSection.Row] = []
+        // Also totaled below for `creditsRemaining`: a credits-only account (no free tier, no
+        // subscription) has `primary`/`secondary` both nil, so the widget's usageRows (which
+        // require a rate-window percent) stays empty without this generic credits fallback.
+        var creditsTotal: Double?
         if let individualCredits = self.individualCredits {
             detailRows.append(.makeRow(
                 label: "Individual credits",
                 value: UsageFormatter.usdString(individualCredits)))
+            creditsTotal = (creditsTotal ?? 0) + individualCredits
         }
         detailRows.append(contentsOf: self.workspaceBalances.map {
             .makeRow(label: "Workspace \($0.name)", value: UsageFormatter.usdString($0.remaining))
         })
+        for balance in self.workspaceBalances {
+            creditsTotal = (creditsTotal ?? 0) + balance.remaining
+        }
 
         return UsageSnapshot(
             primary: primary,
@@ -146,7 +154,8 @@ extension AmpUsageSnapshot {
             providerCost: nil,
             details: detailRows.isEmpty ? [] : [.makeSection(title: "Credits", rows: detailRows)],
             updatedAt: self.updatedAt,
-            identity: identity)
+            identity: identity,
+            creditsRemaining: creditsTotal)
     }
 
     private static func nextFreeTierReset(after date: Date) -> Date? {

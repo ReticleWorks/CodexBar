@@ -243,7 +243,11 @@ extension UsageStore {
             creditsRemaining = displayOnlyExtrasHidden ? nil : projection.credits?.remaining
             codeReviewRemaining = displayOnlyExtrasHidden ? nil : projection.remainingPercent(for: .codeReview)
         } else {
-            creditsRemaining = nil
+            // Credits-only providers (Amp, OpenRouter) have no rate window, so widgetUsageRows'
+            // percentLeft filter drops every row and usageRows ends up empty. Surface whatever
+            // balance the snapshot does carry through the same generic credits line codex uses,
+            // rather than leaving those providers with an empty widget entry.
+            creditsRemaining = snapshot?.providerCost?.balance ?? snapshot?.creditsRemaining
             codeReviewRemaining = nil
         }
         let providerCost: ProviderCostSnapshot? = if provider == .devin,
