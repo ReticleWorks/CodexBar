@@ -219,7 +219,7 @@ public enum ClaudeSwapAccountProjection {
             primary: primary,
             secondary: secondary,
             extraRateWindows: extra.isEmpty ? nil : extra,
-            updatedAt: snapshot.updatedAt,
+            updatedAt: now,
             identity: identity,
             dataConfidence: snapshot.dataConfidence)
     }
