@@ -171,7 +171,9 @@ public enum ClaudeSwapAccountProjection {
             }
             guard row.usageStatus == .unavailable else { return nil }
             return self.retainedAtLimitSnapshot(previous, matching: row, now: now)
-        case .tokenExpired, .reloginRequired, .apiKey, .keychainUnavailable, .noCredentials, .unknown:
+        case .tokenExpired, .reloginRequired:
+            return self.retainedAtLimitSnapshot(previous, matching: row, now: now)
+        case .apiKey, .keychainUnavailable, .noCredentials, .unknown:
             return nil
         }
     }
