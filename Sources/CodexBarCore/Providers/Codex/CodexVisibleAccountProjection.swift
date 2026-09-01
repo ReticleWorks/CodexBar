@@ -200,7 +200,14 @@ extension CodexVisibleAccountProjection {
                     profileIdentity,
                     rhsEmail: profileEmail)
             }) {
-                guard drafts[existingIndex].selectionSource == .liveSystem else { continue }
+                // First-come-first-served merge order would otherwise let an earlier profile
+                // home in `codexProfileHomePaths` permanently claim this identity's draft, even
+                // when the persisted/resolved active source names a later same-identity path —
+                // leaving `isActive` false for every draft and `activeVisibleAccountID` nil.
+                // Let the path that matches the resolved active source reclaim the draft too.
+                guard drafts[existingIndex].selectionSource == .liveSystem
+                    || resolvedActiveSource == .profileHome(path: profilePath)
+                else { continue }
                 let existing = drafts[existingIndex]
                 drafts[existingIndex] = VisibleAccountDraft(
                     email: profileEmail,
