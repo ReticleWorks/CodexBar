@@ -104,6 +104,14 @@ extension UsageStore {
             self.claudeSwapLastRefreshAt = Date()
             self.claudeSwapLastError = nil
             self.claudeSwapRevision &+= 1
+            for account in snapshots {
+                guard let snapshot = account.snapshot else { continue }
+                await self.recordPlanUtilizationHistorySample(
+                    provider: .claude,
+                    snapshot: snapshot,
+                    shouldUpdatePreferredAccountKey: false,
+                    shouldAdoptUnscopedHistory: false)
+            }
         } catch is CancellationError {
             return
         } catch {
