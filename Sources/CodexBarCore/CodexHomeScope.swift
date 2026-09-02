@@ -57,6 +57,15 @@ public enum CodexHomeScope {
             result.append(path)
         }
 
+        // Scanning the real home directory under test would pick up this developer's
+        // actual ~/.codex* profiles and leak them into fixture-driven expectations. Skip
+        // the on-disk scan when the caller left `fileManager` at its real default; a test
+        // that wants to exercise discovery itself supplies its own FileManager (a stubbed
+        // home directory, as CodexHomeScopeDiscoveryTests uses), which still runs.
+        if type(of: fileManager) == FileManager.self, KeychainTestSafety.shouldIsolateUserStateUnderTests() {
+            return result
+        }
+
         let home = fileManager.homeDirectoryForCurrentUser
         let childNames = (try? fileManager.contentsOfDirectory(atPath: home.path)) ?? []
         var discovered: [String] = []
