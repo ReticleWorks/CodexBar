@@ -113,6 +113,22 @@ extension UsageStore {
     private func runCodexCostCatchUp(context: CodexCostCatchUpContext) async {
         while self.codexCostCatchUpContextIsCurrent(context) {
             var status = await self.loadCodexCostCatchUpStatus(codexHomePath: context.codexHomePath)
+            if self.codexCostCatchUpMode == .automatic,
+               status.pending,
+               let marker = self.codexCostCatchUpNoProgressMarker,
+               marker.scopeSignature == context.scopeSignature,
+               marker.progressKey == status.progressKey
+            {
+                // A prior automatic pass already established this exact scope+state can never
+                // advance (see the noProgress branch below). Don't re-run a bounded pass every
+                // background refresh cycle just to rediscover the same dead end.
+                self.publishCodexCostCatchUpActivity(
+                    status: status,
+                    context: context,
+                    phase: .paused,
+                    pauseReason: .noProgress)
+                return
+            }
             self.publishCodexCostCatchUpActivity(
                 status: status,
                 context: context,
@@ -197,6 +213,9 @@ extension UsageStore {
                         return
                     }
                     if nextStatus.pending, !seenProgressKeys.insert(nextStatus.progressKey).inserted {
+                        self.codexCostCatchUpNoProgressMarker = (
+                            scopeSignature: context.scopeSignature,
+                            progressKey: nextStatus.progressKey)
                         self.publishCodexCostCatchUpActivity(
                             status: nextStatus,
                             context: context,

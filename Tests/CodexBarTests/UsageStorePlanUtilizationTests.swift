@@ -1306,18 +1306,22 @@ struct UsageStorePlanUtilizationTests {
             at: directoryURL,
             withIntermediateDirectories: true)
 
+        // Recent (not the historical fixed epoch this test used to use) so the account-level
+        // 30-day staleness prune (PlanUtilizationHistoryStore.pruningStaleAccounts) doesn't drop
+        // "alice" out from under this test — that prune is a different, intentional behavior.
+        let recentEpoch = Date().timeIntervalSince1970.rounded() - 200_000
         let validUnscoped = planSeries(name: .session, windowMinutes: 300, entries: [
-            planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 12),
+            planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 12),
         ])
         let validAccount = planSeries(name: .weekly, windowMinutes: 10080, entries: [
-            planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 64),
+            planEntry(at: Date(timeIntervalSince1970: recentEpoch + 86400), usedPercent: 64),
         ])
         let document = PersistedFixtureDocument(
             version: 1,
             preferredAccountKey: "alice",
             unscoped: [
                 planSeries(name: .session, windowMinutes: 0, entries: [
-                    planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 99),
+                    planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 99),
                 ]),
                 planSeries(name: .weekly, windowMinutes: 10080, entries: []),
                 validUnscoped,
@@ -1325,7 +1329,7 @@ struct UsageStorePlanUtilizationTests {
             accounts: [
                 "alice": [
                     planSeries(name: .session, windowMinutes: 0, entries: [
-                        planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 88),
+                        planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 88),
                     ]),
                     validAccount,
                 ],
@@ -1359,20 +1363,24 @@ struct UsageStorePlanUtilizationTests {
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
             .appendingPathComponent("history", isDirectory: true)
         let store = PlanUtilizationHistoryStore(directoryURL: directoryURL)
+        // Recent (not the historical fixed epoch this test used to use) so the account-level
+        // 30-day staleness prune (PlanUtilizationHistoryStore.pruningStaleAccounts) doesn't drop
+        // "alice" out from under this test — that prune is a different, intentional behavior.
+        let recentEpoch = Date().timeIntervalSince1970.rounded() - 200_000
         var buckets = PlanUtilizationHistoryBuckets(
             preferredAccountKey: "alice",
             unscoped: [
                 planSeries(name: .session, windowMinutes: 300, entries: [
-                    planEntry(at: Date(timeIntervalSince1970: 1_699_913_600), usedPercent: 50),
+                    planEntry(at: Date(timeIntervalSince1970: recentEpoch - 86400), usedPercent: 50),
                 ]),
             ],
             accounts: [
                 "alice": [
                     planSeries(name: .session, windowMinutes: 300, entries: [
-                        planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 10),
+                        planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 10),
                     ]),
                     planSeries(name: .weekly, windowMinutes: 10080, entries: [
-                        planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+                        planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 20),
                     ]),
                 ],
             ])

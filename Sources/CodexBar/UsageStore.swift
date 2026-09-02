@@ -366,6 +366,11 @@ final class UsageStore {
     @ObservationIgnored var codexCostCatchUpStopRequested = false
     @ObservationIgnored var codexCostCatchUpPassIsRunning = false
     @ObservationIgnored var codexCostCatchUpRestartRequested = false
+    // Remembers the (scope, progressKey) an automatic pass already found stuck making no
+    // progress, so the next background refresh cycle doesn't re-attempt the same unresolvable
+    // work every ~30 minutes. Cleared implicitly once progressKey changes (new files, a
+    // resolved fork dependency, etc.) because the comparison then simply fails.
+    @ObservationIgnored var codexCostCatchUpNoProgressMarker: (scopeSignature: String, progressKey: String)?
     @ObservationIgnored var spendDashboardCodexCostCatchUpTask: Task<Void, Never>?
     @ObservationIgnored var spendDashboardCodexCostCatchUpToken: UUID?
     @ObservationIgnored var spendDashboardCodexCostCatchUpScopeSignature: String?

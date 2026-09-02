@@ -1,112 +1,114 @@
 import CodexBarCore
 import Commander
 import Foundation
-import XCTest
+import Testing
 @testable import CodexBarCLI
 
-final class CLIEntryTests: XCTestCase {
+final class CLIEntryTests {
+    @Test
     func test_effectiveArgvDefaultsToUsage() {
-        XCTAssertEqual(CodexBarCLI.effectiveArgv([]), ["usage"])
-        XCTAssertEqual(CodexBarCLI.effectiveArgv(["--json"]), ["usage", "--json"])
-        XCTAssertEqual(CodexBarCLI.effectiveArgv(["usage", "--json"]), ["usage", "--json"])
+        #expect(CodexBarCLI.effectiveArgv([]) == ["usage"])
+        #expect(CodexBarCLI.effectiveArgv(["--json"]) == ["usage", "--json"])
+        #expect(CodexBarCLI.effectiveArgv(["usage", "--json"]) == ["usage", "--json"])
     }
 
+    @Test
     func test_rootHelpAdvertisesDashboardSnapshotCommand() {
         let help = CodexBarCLI.rootHelp(version: "0.0.0")
 
-        XCTAssertTrue(help.contains("codexbar dashboard [--pretty] [--timeout <seconds>] [--output <path>]"))
+        #expect(help.contains("codexbar dashboard [--pretty] [--timeout <seconds>] [--output <path>]"))
     }
 
+    @Test
     func test_dashboardCommandIsRegisteredAndParsesOptions() throws {
         let program = Program(descriptors: CodexBarCLI.commandDescriptors())
         let invocation = try program.resolve(
             argv: ["dashboard", "--pretty", "--timeout", "45", "--output", "/tmp/snapshot.json"])
 
-        XCTAssertEqual(invocation.path, ["dashboard"])
-        XCTAssertTrue(invocation.parsedValues.flags.contains("pretty"))
-        XCTAssertEqual(invocation.parsedValues.options["timeout"], ["45"])
-        XCTAssertEqual(invocation.parsedValues.options["output"], ["/tmp/snapshot.json"])
+        #expect(invocation.path == ["dashboard"])
+        #expect(invocation.parsedValues.flags.contains("pretty"))
+        #expect(invocation.parsedValues.options["timeout"] == ["45"])
+        #expect(invocation.parsedValues.options["output"] == ["/tmp/snapshot.json"])
     }
 
+    @Test
     func test_dashboardTimeoutIsBoundedAndCanBeDisabled() {
-        XCTAssertEqual(
-            CodexBarCLI.decodeDashboardTimeout(from: ParsedValues(positional: [], options: [:], flags: [])),
-            30)
-        XCTAssertEqual(
-            CodexBarCLI.decodeDashboardTimeout(
-                from: ParsedValues(positional: [], options: ["timeout": ["0"]], flags: [])),
-            0)
-        XCTAssertEqual(
-            CodexBarCLI.decodeDashboardTimeout(
-                from: ParsedValues(positional: [], options: ["timeout": ["86400"]], flags: [])),
-            86400)
+        #expect(CodexBarCLI.decodeDashboardTimeout(from: ParsedValues(positional: [], options: [:], flags: [])) == 30)
+        #expect(CodexBarCLI.decodeDashboardTimeout(
+                from: ParsedValues(positional: [], options: ["timeout": ["0"]], flags: [])) == 0)
+        #expect(CodexBarCLI.decodeDashboardTimeout(
+                from: ParsedValues(positional: [], options: ["timeout": ["86400"]], flags: [])) == 86400)
 
         for value in ["-1", "nan", "inf", "86401"] {
-            XCTAssertNil(CodexBarCLI.decodeDashboardTimeout(
-                from: ParsedValues(positional: [], options: ["timeout": [value]], flags: [])))
+            #expect(CodexBarCLI.decodeDashboardTimeout(
+                from: ParsedValues(positional: [], options: ["timeout": [value]], flags: [])) == nil)
         }
     }
 
+    @Test
     func test_dashboardCommanderErrorsStayOffStdout() throws {
         let result = try Self.runCLI(arguments: ["dashboard", "--json"])
 
-        XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.stdout.isEmpty)
-        XCTAssertFalse(result.stderr.isEmpty)
+        #expect(result.status != 0)
+        #expect(result.stdout.isEmpty)
+        #expect(!(result.stderr.isEmpty))
     }
 
     /// `Program.resolve` throws before `ParsedValues` (and `resolveUsageOutputPreferences`) exist, so
     /// a genuine parse failure -- an unrecognized option here -- has to go through the argv-level
     /// `CLIOutputPreferences.from(argv:)` bootstrap scanner. Regression test for that scanner not
     /// recognizing `--format toon` and silently falling back to plain stderr text.
+    @Test
     func test_usageCommanderParseFailureWithToonAndJSONRendersTOON() throws {
         let result = try Self.runCLI(arguments: ["usage", "--format", "toon", "--json", "--bogus-flag-xyz"])
 
-        XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.stderr.isEmpty)
-        let stdout = try XCTUnwrap(String(bytes: result.stdout, encoding: .utf8))
-        XCTAssertTrue(stdout.contains("- provider: cli"))
-        XCTAssertTrue(stdout.contains("Unknown option --bogus-flag-xyz"))
-        XCTAssertFalse(stdout.hasPrefix("[{"), "TOON error output should not fall back to a JSON array literal")
+        #expect(result.status != 0)
+        #expect(result.stderr.isEmpty)
+        let stdout = try #require(String(bytes: result.stdout, encoding: .utf8))
+        #expect(stdout.contains("- provider: cli"))
+        #expect(stdout.contains("Unknown option --bogus-flag-xyz"))
+        #expect(!(stdout.hasPrefix("[{")), "TOON error output should not fall back to a JSON array literal")
     }
 
+    @Test
     func test_usageCommanderParseFailureRendersTOONWhenRequested() throws {
         let result = try Self.runCLI(arguments: ["usage", "--bogus-flag-xyz", "--format", "toon"])
 
-        XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.stderr.isEmpty)
-        let stdout = try XCTUnwrap(String(bytes: result.stdout, encoding: .utf8))
-        XCTAssertTrue(stdout.contains("- provider: cli"))
-        XCTAssertTrue(stdout.contains("message: Unknown option --bogus-flag-xyz"))
-        XCTAssertFalse(stdout.hasPrefix("[{"), "TOON error output should not fall back to a JSON array literal")
-        XCTAssertFalse(stdout.contains("\"provider\""), "TOON error output should not contain JSON-quoted keys")
+        #expect(result.status != 0)
+        #expect(result.stderr.isEmpty)
+        let stdout = try #require(String(bytes: result.stdout, encoding: .utf8))
+        #expect(stdout.contains("- provider: cli"))
+        #expect(stdout.contains("message: Unknown option --bogus-flag-xyz"))
+        #expect(!(stdout.hasPrefix("[{")), "TOON error output should not fall back to a JSON array literal")
+        #expect(!(stdout.contains("\"provider\"")), "TOON error output should not contain JSON-quoted keys")
     }
 
+    @Test
     func test_usageCommanderParseFailureWithEqualsFormatRendersTOON() throws {
         let result = try Self.runCLI(arguments: ["usage", "--bogus-flag-xyz", "--format=toon"])
 
-        XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.stderr.isEmpty)
-        let stdout = try XCTUnwrap(String(bytes: result.stdout, encoding: .utf8))
-        XCTAssertTrue(stdout.contains("Unknown option --bogus-flag-xyz"))
+        #expect(result.status != 0)
+        #expect(result.stderr.isEmpty)
+        let stdout = try #require(String(bytes: result.stdout, encoding: .utf8))
+        #expect(stdout.contains("Unknown option --bogus-flag-xyz"))
     }
 
     /// TOON is a `usage`-only contract. Commands whose help promises `text | json` must keep treating
     /// `--format toon` as an unrecognized value -- reporting on stderr as text -- rather than silently
     /// switching to the JSON branch.
+    @Test
     func test_nonUsageCommandsDoNotInheritTOONOutput() throws {
         for command in ["cost", "diagnose", "cache"] {
             let result = try Self.runCLI(arguments: [command, "--format", "toon", "--bogus-flag-xyz"])
 
-            XCTAssertNotEqual(result.status, 0, "\(command) should still fail on an unknown option")
-            XCTAssertTrue(result.stdout.isEmpty, "\(command) must not emit a structured payload on stdout")
-            let stderr = try XCTUnwrap(String(bytes: result.stderr, encoding: .utf8))
-            XCTAssertTrue(
-                stderr.contains("Unknown option --bogus-flag-xyz"),
-                "\(command) should report the parse failure as text on stderr")
+            #expect(result.status != 0, "\(command) should still fail on an unknown option")
+            #expect(result.stdout.isEmpty, "\(command) must not emit a structured payload on stdout")
+            let stderr = try #require(String(bytes: result.stderr, encoding: .utf8))
+            #expect(stderr.contains("Unknown option --bogus-flag-xyz"), "\(command) should report the parse failure as text on stderr")
         }
     }
 
+    @Test
     func test_dashboardCommandPrintsOneSnapshotAndExits() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-dashboard-command-\(UUID().uuidString)", isDirectory: true)
@@ -124,18 +126,18 @@ final class CLIEntryTests: XCTestCase {
         let result = try Self.runCLI(
             arguments: ["dashboard"],
             environment: [CodexBarConfigStore.pathEnvironmentKey: configURL.path])
-        XCTAssertEqual(result.status, 0)
-        XCTAssertEqual(result.stdout.last, 0x0A)
+        #expect(result.status == 0)
+        #expect(result.stdout.last == 0x0A)
 
-        let object = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: result.stdout) as? [String: Any])
-        XCTAssertEqual(object["schemaVersion"] as? Int, 1)
-        let providers = try XCTUnwrap(object["providers"] as? [[String: Any]])
-        XCTAssertTrue(providers.isEmpty)
-        let host = try XCTUnwrap(object["host"] as? [String: Any])
-        XCTAssertEqual(host["refreshIntervalSeconds"] as? Int, 0)
+        let object = try #require(JSONSerialization.jsonObject(with: result.stdout) as? [String: Any])
+        #expect(object["schemaVersion"] as? Int == 1)
+        let providers = try #require(object["providers"] as? [[String: Any]])
+        #expect(providers.isEmpty)
+        let host = try #require(object["host"] as? [String: Any])
+        #expect(host["refreshIntervalSeconds"] as? Int == 0)
     }
 
+    @Test
     func test_dashboardOutputWritesSnapshotFileAndKeepsStdoutSilent() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-dashboard-output-\(UUID().uuidString)", isDirectory: true)
@@ -158,44 +160,46 @@ final class CLIEntryTests: XCTestCase {
         let result = try Self.runCLI(
             arguments: ["dashboard", "--output", snapshotURL.path],
             environment: [CodexBarConfigStore.pathEnvironmentKey: configURL.path])
-        XCTAssertEqual(result.status, 0)
-        XCTAssertTrue(result.stdout.isEmpty)
+        #expect(result.status == 0)
+        #expect(result.stdout.isEmpty)
 
         let written = try Data(contentsOf: snapshotURL)
-        XCTAssertEqual(written.last, 0x0A)
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: written) as? [String: Any])
-        XCTAssertEqual(object["schemaVersion"] as? Int, 1)
+        #expect(written.last == 0x0A)
+        let object = try #require(JSONSerialization.jsonObject(with: written) as? [String: Any])
+        #expect(object["schemaVersion"] as? Int == 1)
 
         let attributes = try FileManager.default.attributesOfItem(atPath: snapshotURL.path)
-        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.uint16Value, 0o644)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o644)
 
         // The staged temp file must not survive a successful publish.
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path)
             .filter { $0.contains("codexbar-dashboard-") }
-        XCTAssertEqual(leftovers, [])
+        #expect(leftovers == [])
     }
 
+    @Test
     func test_dashboardOutputRejectsEmptyPathAsArgsError() throws {
         let result = try Self.runCLI(arguments: ["dashboard", "--output", ""])
 
-        XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.stdout.isEmpty)
-        let stderrText = try XCTUnwrap(String(bytes: result.stderr, encoding: .utf8))
-        XCTAssertTrue(stderrText.contains("--output requires a non-empty file path."))
+        #expect(result.status != 0)
+        #expect(result.stdout.isEmpty)
+        let stderrText = try #require(String(bytes: result.stderr, encoding: .utf8))
+        #expect(stderrText.contains("--output requires a non-empty file path."))
     }
 
-    func test_dashboardAtomicWriteFailsWhenDirectoryIsMissing() {
+    @Test
+    func test_dashboardAtomicWriteFailsWhenDirectoryIsMissing() throws {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-missing-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("snapshot.json")
 
-        XCTAssertThrowsError(
-            try CodexBarCLI.writeDashboardSnapshotAtomically(Data("{}".utf8), toPath: missing.path))
-        { error in
-            XCTAssertTrue(error.localizedDescription.contains("does not exist"))
+        let error = try #require(throws: (any Error).self) {
+            try CodexBarCLI.writeDashboardSnapshotAtomically(Data("{}".utf8), toPath: missing.path)
         }
+        #expect(error.localizedDescription.contains("does not exist"))
     }
 
+    @Test
     func test_dashboardAtomicWriteReplacesExistingFile() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-atomic-write-\(UUID().uuidString)", isDirectory: true)
@@ -207,40 +211,45 @@ final class CLIEntryTests: XCTestCase {
 
         try CodexBarCLI.writeDashboardSnapshotAtomically(Data("new".utf8), toPath: target.path)
 
-        XCTAssertEqual(try Data(contentsOf: target), Data("new".utf8))
+        #expect(try Data(contentsOf: target) == Data("new".utf8))
         let attributes = try FileManager.default.attributesOfItem(atPath: target.path)
-        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.uint16Value, 0o644)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["snapshot.json"])
+        #expect((attributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o644)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == ["snapshot.json"])
     }
 
+    @Test
     func test_decodesFormatFromOptionsAndFlags() {
         let jsonOption = ParsedValues(positional: [], options: ["format": ["json"]], flags: [])
-        XCTAssertEqual(CodexBarCLI._decodeFormatForTesting(from: jsonOption), .json)
+        #expect(CodexBarCLI._decodeFormatForTesting(from: jsonOption) == .json)
 
         let jsonFlag = ParsedValues(positional: [], options: [:], flags: ["json"])
-        XCTAssertEqual(CodexBarCLI._decodeFormatForTesting(from: jsonFlag), .json)
+        #expect(CodexBarCLI._decodeFormatForTesting(from: jsonFlag) == .json)
 
         let textDefault = ParsedValues(positional: [], options: [:], flags: [])
-        XCTAssertEqual(CodexBarCLI._decodeFormatForTesting(from: textDefault), .text)
+        #expect(CodexBarCLI._decodeFormatForTesting(from: textDefault) == .text)
     }
 
+    @Test
     func test_providerSelectionPrefersOverride() {
         let selection = CodexBarCLI.providerSelection(rawOverride: "codex", enabled: [.claude, .gemini])
-        XCTAssertEqual(selection.asList, [.codex])
+        #expect(selection.asList == [.codex])
     }
 
+    @Test
     func test_normalizeVersionExtractsNumeric() {
-        XCTAssertEqual(CodexBarCLI.normalizeVersion(raw: "codex 1.2.3 (build 4)"), "1.2.3")
-        XCTAssertEqual(CodexBarCLI.normalizeVersion(raw: "  v2.0  "), "2.0")
+        #expect(CodexBarCLI.normalizeVersion(raw: "codex 1.2.3 (build 4)") == "1.2.3")
+        #expect(CodexBarCLI.normalizeVersion(raw: "  v2.0  ") == "2.0")
     }
 
+    @Test
     func test_makeHeaderIncludesVersionWhenAvailable() {
         let header = CodexBarCLI.makeHeader(provider: .codex, version: "1.2.3", source: "cli")
-        XCTAssertTrue(header.contains("Codex"))
-        XCTAssertTrue(header.contains("1.2.3"))
-        XCTAssertTrue(header.contains("cli"))
+        #expect(header.contains("Codex"))
+        #expect(header.contains("1.2.3"))
+        #expect(header.contains("cli"))
     }
 
+    @Test
     func test_cliVersionFallsBackToContainingAppBundle() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-\(UUID().uuidString)", isDirectory: true)
@@ -259,9 +268,10 @@ final class CLIEntryTests: XCTestCase {
         let helperURL = helpersURL.appendingPathComponent("CodexBarCLI")
         try Data().write(to: helperURL)
 
-        XCTAssertEqual(CodexBarCLI.containingAppVersion(for: helperURL), "9.8.7")
+        #expect(CodexBarCLI.containingAppVersion(for: helperURL) == "9.8.7")
     }
 
+    @Test
     func test_containingAppVersionTerminatesOutsideAppBundle() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-noapp-\(UUID().uuidString)", isDirectory: true)
@@ -272,10 +282,11 @@ final class CLIEntryTests: XCTestCase {
         let executableURL = binURL.appendingPathComponent("CodexBarCLI")
         try Data().write(to: executableURL)
 
-        XCTAssertNil(CodexBarCLI.containingAppVersion(for: executableURL))
-        XCTAssertNil(CodexBarCLI.containingAppVersion(for: URL(fileURLWithPath: "/")))
+        #expect(CodexBarCLI.containingAppVersion(for: executableURL) == nil)
+        #expect(CodexBarCLI.containingAppVersion(for: URL(fileURLWithPath: "/")) == nil)
     }
 
+    @Test
     func test_nextAncestorRejectsNonDecreasingParents() {
         let current = URL(fileURLWithPath: "/synthetic/current")
         let candidates = [
@@ -290,11 +301,12 @@ final class CLIEntryTests: XCTestCase {
                 return candidate
             }
 
-            XCTAssertNil(ancestor)
-            XCTAssertEqual(calls, 1)
+            #expect(ancestor == nil)
+            #expect(calls == 1)
         }
     }
 
+    @Test
     func test_cliVersionFollowsSymlinkedHelper() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-symlink-\(UUID().uuidString)", isDirectory: true)
@@ -318,15 +330,17 @@ final class CLIEntryTests: XCTestCase {
         let symlinkURL = binURL.appendingPathComponent("codexbar")
         try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: helperURL)
 
-        XCTAssertEqual(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: symlinkURL.path), "2.4.6")
+        #expect(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: symlinkURL.path) == "2.4.6")
     }
 
+    @Test
     func test_cliVersionFallsBackToAdjacentVersionFile() throws {
         try self.expectAdjacentVersionFile(raw: "v3.2.1\n", expected: "3.2.1")
         try self.expectAdjacentVersionFile(raw: "3.2.2\n", expected: "3.2.2")
         try self.expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
     }
 
+    @Test
     func test_cliVersionFindsAdjacentVersionWhenInvokedViaRelativePathAndSymlink() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-invocation-\(UUID().uuidString)", isDirectory: true)
@@ -347,25 +361,22 @@ final class CLIEntryTests: XCTestCase {
             atomically: false,
             encoding: .utf8)
 
-        XCTAssertEqual(
-            try Self.runVersionCommand(
+        #expect(try Self.runVersionCommand(
                 executableURL: executableURL,
                 argv0: "install/bin/CodexBarCLI",
-                currentDirectoryURL: workingDirectoryURL),
-            "CodexBar 8.7.6\n")
+                currentDirectoryURL: workingDirectoryURL) == "CodexBar 8.7.6\n")
 
         let symlinkURL = linksURL.appendingPathComponent("codexbar")
         try FileManager.default.createSymbolicLink(
             atPath: symlinkURL.path,
             withDestinationPath: "../install/bin/CodexBarCLI")
-        XCTAssertEqual(
-            try Self.runVersionCommand(
+        #expect(try Self.runVersionCommand(
                 executableURL: symlinkURL,
                 argv0: "codexbar",
-                currentDirectoryURL: workingDirectoryURL),
-            "CodexBar 8.7.6\n")
+                currentDirectoryURL: workingDirectoryURL) == "CodexBar 8.7.6\n")
     }
 
+    @Test
     func test_cliVersionPrefersAdjacentVersionOverStandaloneBundleName() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-bundle-\(UUID().uuidString)", isDirectory: true)
@@ -381,9 +392,7 @@ final class CLIEntryTests: XCTestCase {
             atomically: false,
             encoding: .utf8)
 
-        XCTAssertEqual(
-            CodexBarCLI.currentVersion(bundleVersion: "CodexBar", executablePath: helperURL.path),
-            "4.5.6")
+        #expect(CodexBarCLI.currentVersion(bundleVersion: "CodexBar", executablePath: helperURL.path) == "4.5.6")
     }
 
     private func expectAdjacentVersionFile(raw: String, expected: String) throws {
@@ -401,7 +410,7 @@ final class CLIEntryTests: XCTestCase {
             atomically: false,
             encoding: .utf8)
 
-        XCTAssertEqual(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: helperURL.path), expected)
+        #expect(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: helperURL.path) == expected)
     }
 
     private static func runVersionCommand(
@@ -456,6 +465,7 @@ final class CLIEntryTests: XCTestCase {
             .appendingPathComponent(".build/debug/CodexBarCLI")
     }
 
+    @Test
     func test_renderOpenAIWebDashboardTextIncludesSummary() {
         let event = CreditEvent(
             date: Date(timeIntervalSince1970: 1_700_000_000),
@@ -477,117 +487,130 @@ final class CLIEntryTests: XCTestCase {
 
         let text = CodexBarCLI.renderOpenAIWebDashboardText(snapshot)
 
-        XCTAssertTrue(text.contains("Web session: user@example.com"))
-        XCTAssertTrue(text.contains("Code review: 45% remaining (Resets in "))
-        XCTAssertTrue(text.contains("Web history: 1 events"))
+        #expect(text.contains("Web session: user@example.com"))
+        #expect(text.contains("Code review: 45% remaining (Resets in "))
+        #expect(text.contains("Web history: 1 events"))
     }
 
+    @Test
     func test_mapsErrorsToExitCodes() {
-        XCTAssertEqual(CodexBarCLI.mapError(CodexStatusProbeError.codexNotInstalled), ExitCode(2))
-        XCTAssertEqual(CodexBarCLI.mapError(CodexStatusProbeError.timedOut), ExitCode(4))
-        XCTAssertEqual(CodexBarCLI.mapError(ClaudeWebFetchStrategyError.timedOut(seconds: 1)), ExitCode(4))
-        XCTAssertEqual(CodexBarCLI.mapError(UsageError.noRateLimitsFound), ExitCode(3))
+        #expect(CodexBarCLI.mapError(CodexStatusProbeError.codexNotInstalled) == ExitCode(2))
+        #expect(CodexBarCLI.mapError(CodexStatusProbeError.timedOut) == ExitCode(4))
+        #expect(CodexBarCLI.mapError(ClaudeWebFetchStrategyError.timedOut(seconds: 1)) == ExitCode(4))
+        #expect(CodexBarCLI.mapError(UsageError.noRateLimitsFound) == ExitCode(3))
     }
 
+    @Test
     func test_antigravityPlanDebugKeepsOneShotHelperAliveUntilDebugFetch() {
-        XCTAssertTrue(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
+        #expect(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
             provider: .antigravity,
             planDebugEnabled: true,
             jsonOnly: false,
             persistsCLISessions: false))
-        XCTAssertFalse(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
+        #expect(!(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
             provider: .codex,
             planDebugEnabled: true,
             jsonOnly: false,
-            persistsCLISessions: false))
-        XCTAssertFalse(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
+            persistsCLISessions: false)))
+        #expect(!(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
             provider: .antigravity,
             planDebugEnabled: true,
             jsonOnly: true,
-            persistsCLISessions: false))
-        XCTAssertFalse(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
+            persistsCLISessions: false)))
+        #expect(!(CodexBarCLI.holdsAntigravityCLISessionForPlanDebug(
             provider: .antigravity,
             planDebugEnabled: true,
             jsonOnly: false,
-            persistsCLISessions: true))
+            persistsCLISessions: true)))
     }
 
+    @Test
     func test_missingCodexBinaryErrorPayloadUsesInstallGuidance() {
         let payload = CodexBarCLI.makeErrorPayload(CodexStatusProbeError.codexNotInstalled, kind: .provider)
 
-        XCTAssertEqual(payload.code, ExitCode.binaryNotFound.rawValue)
-        XCTAssertTrue(payload.message.contains("Codex CLI missing"))
-        XCTAssertFalse(payload.message.contains("Codex not running"))
+        #expect(payload.code == ExitCode.binaryNotFound.rawValue)
+        #expect(payload.message.contains("Codex CLI missing"))
+        #expect(!(payload.message.contains("Codex not running")))
     }
 
+    @Test
     func test_providerSelectionFallsBackToBothForPrimaryPair() {
         let selection = CodexBarCLI.providerSelection(rawOverride: nil, enabled: [.codex, .claude])
         switch selection {
         case .both:
             break
         default:
-            XCTFail("Expected both selection")
+            Issue.record("Expected both selection")
         }
     }
 
+    @Test
     func test_providerSelectionFallsBackToCustomWhenNonPrimary() {
         let selection = CodexBarCLI.providerSelection(rawOverride: nil, enabled: [.codex, .gemini])
         switch selection {
         case let .custom(providers):
-            XCTAssertEqual(providers, [.codex, .gemini])
+            #expect(providers == [.codex, .gemini])
         default:
-            XCTFail("Expected custom selection")
+            Issue.record("Expected custom selection")
         }
     }
 
+    @Test
     func test_providerSelectionHonorsEmptyEnabledSet() {
         let selection = CodexBarCLI.providerSelection(rawOverride: nil, enabled: [])
         switch selection {
         case let .custom(providers):
-            XCTAssertEqual(providers, [])
+            #expect(providers == [])
         default:
-            XCTFail("Expected empty custom selection")
+            Issue.record("Expected empty custom selection")
         }
     }
 
+    @Test
     func test_decodesSourceAndTimeoutOptions() throws {
         let signature = CodexBarCLI._usageSignatureForTesting()
         let parser = CommandParser(signature: signature)
         let parsed = try parser.parse(arguments: ["--web-timeout", "45", "--source", "oauth"])
-        XCTAssertEqual(try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed), 45)
-        XCTAssertEqual(CodexBarCLI._decodeSourceModeForTesting(from: parsed), .oauth)
+        #expect(try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed) == 45)
+        #expect(CodexBarCLI._decodeSourceModeForTesting(from: parsed) == .oauth)
 
         let parsedWeb = try parser.parse(arguments: ["--web"])
-        XCTAssertEqual(CodexBarCLI._decodeSourceModeForTesting(from: parsedWeb), .web)
+        #expect(CodexBarCLI._decodeSourceModeForTesting(from: parsedWeb) == .web)
     }
 
+    @Test
     func test_rejectsUnsafeWebTimeoutOptions() throws {
         for value in ["-1", "nan", "inf", "1e300"] {
             let parsed = ParsedValues(positional: [], options: ["webTimeout": [value]], flags: [])
-            XCTAssertThrowsError(try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed))
+            #expect(throws: (any Error).self) {
+                try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed)
+            }
         }
     }
 
+    @Test
     func test_shouldUseColorRespectsFormatAndFlags() {
-        XCTAssertFalse(CodexBarCLI.shouldUseColor(noColor: true, format: .text))
-        XCTAssertFalse(CodexBarCLI.shouldUseColor(noColor: false, format: .json))
+        #expect(!(CodexBarCLI.shouldUseColor(noColor: true, format: .text)))
+        #expect(!(CodexBarCLI.shouldUseColor(noColor: false, format: .json)))
     }
 
+    @Test
     func test_kiloUsageTextNotesShowFallbackOnlyForAutoResolvedToCLI() {
-        XCTAssertEqual(CodexBarCLI.usageTextNotes(
+        #expect(CodexBarCLI.usageTextNotes(
             provider: .kilo,
             sourceMode: .auto,
-            resolvedSourceLabel: "cli"), ["Using CLI fallback"])
-        XCTAssertTrue(CodexBarCLI.usageTextNotes(
+            resolvedSourceLabel: "cli") == ["Using CLI fallback"])
+        #expect(CodexBarCLI.usageTextNotes(
             provider: .kilo,
             sourceMode: .api,
             resolvedSourceLabel: "cli").isEmpty)
-        XCTAssertTrue(CodexBarCLI.usageTextNotes(
+        #expect(CodexBarCLI.usageTextNotes(
             provider: .codex,
             sourceMode: .auto,
             resolvedSourceLabel: "cli").isEmpty)
     }
 
+    @Test
     func test_kiloAutoFallbackSummaryIncludesOrderedAttemptDetails() {
         let attempts = [
             ProviderFetchAttempt(
@@ -611,9 +634,10 @@ final class CLIEntryTests: XCTestCase {
             " -> cli: Kilo CLI session not found.",
         ].joined()
 
-        XCTAssertEqual(summary, expected)
+        #expect(summary == expected)
     }
 
+    @Test
     func test_kiloAutoFallbackSummaryIsNilOutsideKiloAutoFailures() {
         let attempts = [
             ProviderFetchAttempt(
@@ -623,16 +647,17 @@ final class CLIEntryTests: XCTestCase {
                 errorDescription: "example"),
         ]
 
-        XCTAssertNil(CodexBarCLI.kiloAutoFallbackSummary(
+        #expect(CodexBarCLI.kiloAutoFallbackSummary(
             provider: .kilo,
             sourceMode: .api,
-            attempts: attempts))
-        XCTAssertNil(CodexBarCLI.kiloAutoFallbackSummary(
+            attempts: attempts) == nil)
+        #expect(CodexBarCLI.kiloAutoFallbackSummary(
             provider: .codex,
             sourceMode: .auto,
-            attempts: attempts))
+            attempts: attempts) == nil)
     }
 
+    @Test
     func test_sourceModeRequiresWebSupportIsProviderAware() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("mimo-cli-source-mode-\(UUID().uuidString)", isDirectory: true)
@@ -651,40 +676,40 @@ final class CLIEntryTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: payload).write(to: validMiMoCache)
         try Data("{}".utf8).write(to: invalidMiMoCache)
 
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .kilo))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .codex))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .claude))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .claude))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .kilo))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .grok))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .grok))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .amp))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.api, provider: .kilo))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .kilo))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .codex)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .claude)))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .claude))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .kilo)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .grok)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .grok)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .amp)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(.api, provider: .kilo)))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .opencodego,
             settings: ProviderSettingsSnapshot.make(
                 opencodego: .init(
                     cookieSource: .manual,
                     manualCookieHeader: "auth=manual",
-                    workspaceID: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+                    workspaceID: nil)))))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .opencodego,
             settings: ProviderSettingsSnapshot.make(
                 opencodego: .init(
                     cookieSource: .manual,
                     manualCookieHeader: "auth=manual",
-                    workspaceID: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+                    workspaceID: nil)))))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .opencodego,
             settings: ProviderSettingsSnapshot.make(
                 opencodego: .init(
                     cookieSource: .auto,
                     manualCookieHeader: nil,
-                    workspaceID: nil))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+                    workspaceID: nil)))))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .opencodego,
             settings: ProviderSettingsSnapshot.make(
@@ -692,54 +717,54 @@ final class CLIEntryTests: XCTestCase {
                     cookieSource: .auto,
                     manualCookieHeader: nil,
                     workspaceID: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .commandcode,
             settings: ProviderSettingsSnapshot.make(
                 commandcode: .init(
                     cookieSource: .manual,
-                    manualCookieHeader: "session=manual"))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+                    manualCookieHeader: "session=manual")))))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .commandcode,
             settings: ProviderSettingsSnapshot.make(
                 commandcode: .init(
                     cookieSource: .manual,
-                    manualCookieHeader: "session=manual"))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+                    manualCookieHeader: "session=manual")))))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .commandcode,
             settings: ProviderSettingsSnapshot.make(
                 commandcode: .init(
                     cookieSource: .auto,
                     manualCookieHeader: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .sakana,
-            environment: ["SAKANA_COOKIE": "session=manual"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["SAKANA_COOKIE": "session=manual"])))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .sakana,
-            environment: ["SAKANA_COOKIE": "session=manual"]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["SAKANA_COOKIE": "session=manual"])))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .sakana,
             environment: [:]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .qoder,
             settings: ProviderSettingsSnapshot.make(
                 qoder: .init(
                     cookieSource: .manual,
-                    manualCookieHeader: "sid=manual"))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+                    manualCookieHeader: "sid=manual")))))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .qoder,
             settings: ProviderSettingsSnapshot.make(
                 qoder: .init(
                     cookieSource: .auto,
                     manualCookieHeader: nil))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .opencode,
             settings: ProviderSettingsSnapshot.make(
@@ -747,77 +772,79 @@ final class CLIEntryTests: XCTestCase {
                     cookieSource: .manual,
                     manualCookieHeader: "auth=manual",
                     workspaceID: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .ollama,
-            environment: ["OLLAMA_API_KEY": "ollama-test"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["OLLAMA_API_KEY": "ollama-test"])))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .codex,
-            environment: ["OLLAMA_API_KEY": "ollama-test"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["OLLAMA_API_KEY": "ollama-test"])))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .ollama,
             settings: ProviderSettingsSnapshot.make(
-                ollama: .init(cookieSource: .off, manualCookieHeader: nil))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+                ollama: .init(cookieSource: .off, manualCookieHeader: nil)))))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .kimi,
-            environment: ["KIMI_CODE_API_KEY": "kimi-test"]))
+            environment: ["KIMI_CODE_API_KEY": "kimi-test"])))
         try self.assertKimiCodeCredentialSourceMode(in: directory)
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .mimo,
-            environment: ["MIMO_LOCAL_USAGE_PATH": validMiMoCache.path]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["MIMO_LOCAL_USAGE_PATH": validMiMoCache.path])))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .mimo,
             environment: ["MIMO_LOCAL_USAGE_PATH": validMiMoCache.path]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .mimo,
-            environment: ["MIMO_LOCAL_USAGE_PATH": invalidMiMoCache.path]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["MIMO_LOCAL_USAGE_PATH": invalidMiMoCache.path])))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .mimo,
             environment: ["MIMO_LOCAL_USAGE_PATH": directory.appendingPathComponent("missing.json").path]))
     }
 
+    @Test
     func test_sourceModeRequiresWebSupportAllowsOllamaManualCookieOnLinuxGate() {
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .ollama,
             settings: ProviderSettingsSnapshot.make(
-                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual"))))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual")))))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .ollama,
             settings: ProviderSettingsSnapshot.make(
-                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual"))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual")))))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .ollama,
             settings: ProviderSettingsSnapshot.make(
                 ollama: .init(cookieSource: .manual, manualCookieHeader: "   "))))
     }
 
+    @Test
     func test_sourceModeRequiresWebSupportAllowsQwenCookiesOnLinuxGate() {
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .qwencloud,
-            environment: ["QWEN_CLOUD_COOKIE": "login_qwencloud_ticket=test"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["QWEN_CLOUD_COOKIE": "login_qwencloud_ticket=test"])))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .qwencloud,
             settings: ProviderSettingsSnapshot.make(
                 qwenCloud: .init(
                     cookieSource: .manual,
-                    manualCookieHeader: "login_qwencloud_ticket=test"))))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+                    manualCookieHeader: "login_qwencloud_ticket=test")))))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .qwencloud,
             environment: [:]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .qwencloud,
             environment: ["QWEN_CLOUD_COOKIE": "login_qwencloud_ticket=test"],
@@ -837,33 +864,34 @@ final class CLIEntryTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: payload)
             .write(to: credentials.appendingPathComponent("kimi-code.json"))
 
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .kimi,
-            environment: ["KIMI_CODE_HOME": home.path]))
+            environment: ["KIMI_CODE_HOME": home.path])))
     }
 
+    @Test
     func test_sourceModeRequiresWebSupportAllowsFactoryAPIKeyOnLinuxGate() {
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .factory,
-            environment: ["FACTORY_API_KEY": "fk-test"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["FACTORY_API_KEY": "fk-test"])))
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .cli,
             provider: .factory,
-            environment: ["FACTORY_API_KEY": "fk-test"]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            environment: ["FACTORY_API_KEY": "fk-test"])))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .factory,
             environment: [:]))
-        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .factory,
             environment: ["FACTORY_API_KEY": "fk-test"]))
-        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+        #expect(!(CodexBarCLI.sourceModeRequiresWebSupport(
             .api,
             provider: .factory,
-            environment: [:]))
+            environment: [:])))
     }
 
     private static func runCLI(

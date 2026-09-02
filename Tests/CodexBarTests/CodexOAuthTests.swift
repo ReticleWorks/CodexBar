@@ -756,6 +756,16 @@ struct CodexOAuthTests {
         #expect(!strategy.shouldFallback(
             on: CodexTokenRefresher.RefreshError.networkError(URLError(.timedOut)),
             context: context))
+
+        // A one-shot CLI invocation has no repeated-app-server-spawn risk, so it should still
+        // reach the local CLI strategy on a network error instead of surfacing a hung request.
+        let cliContext = self.makeContext(runtime: .cli, sourceMode: .auto)
+        #expect(strategy.shouldFallback(
+            on: CodexOAuthFetchError.networkError(URLError(.notConnectedToInternet)),
+            context: cliContext))
+        #expect(strategy.shouldFallback(
+            on: CodexTokenRefresher.RefreshError.networkError(URLError(.timedOut)),
+            context: cliContext))
     }
 
     @Test
@@ -864,5 +874,23 @@ struct CodexOAuthTests {
         let config = "chatgpt_base_url = \"https://chat.openai.com\"\n"
         let url = CodexOAuthUsageFetcher._resolveUsageURLForTesting(configContents: config)
         #expect(url.absoluteString == "https://chat.openai.com/backend-api/wham/usage")
+    }
+
+    @Test
+    func `CLI fetch watchdog bounds a stalled operation and lets the app runtime run unbounded`() async throws {
+        await #expect(throws: CodexOAuthFetchError.self) {
+            _ = try await CodexCLIFetchWatchdog.run(runtime: .cli, grace: .milliseconds(20)) {
+                try await Task.sleep(for: .seconds(60))
+                return 1
+            }
+        }
+
+        // The long-lived app has its own repeated-spawn safeguards elsewhere, so the watchdog
+        // only bounds the one-shot CLI runtime; a slow app-runtime operation still completes.
+        let value = try await CodexCLIFetchWatchdog.run(runtime: .app, grace: .milliseconds(20)) {
+            try await Task.sleep(for: .milliseconds(50))
+            return 1
+        }
+        #expect(value == 1)
     }
 }

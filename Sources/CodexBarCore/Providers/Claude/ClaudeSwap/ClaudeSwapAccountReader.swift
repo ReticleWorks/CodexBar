@@ -121,16 +121,12 @@ public enum ClaudeSwapAccountReader {
         return result.stdout
     }
 
-    /// Listing must not inspect or mutate the browser user's active Claude profile.
-    /// claude-swap keeps its managed-account store under the user's home directory,
-    /// so an empty profile root still exposes every managed backup as an inactive account.
+    /// Listing inherits the app environment so claude-swap reads the user's real
+    /// active Claude profile. Pointing it at a private profile root made it report
+    /// the wrong active account and refuse to consume refresh tokens
+    /// ("CLAUDE_SECURESTORAGE_CONFIG_DIR is set ... refusing to consume").
     private static func accountListEnvironment() -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
-        let profileRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/CodexBar/ClaudeSwapListProfile", isDirectory: true)
-        environment[ClaudeConfigPaths.configDirectoryEnvironmentKey] = profileRoot.path
-        environment[ClaudeConfigPaths.secureStorageDirectoryEnvironmentKey] = profileRoot.path
-        return environment
+        ProcessInfo.processInfo.environment
     }
 
     /// Once launched, a credential mutation must reach the external tool's

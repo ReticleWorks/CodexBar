@@ -166,6 +166,11 @@ public struct UsageSnapshot: Codable, Sendable {
     public let updatedAt: Date
     public let identity: ProviderIdentitySnapshot?
     public let dataConfidence: UsageDataConfidence
+    /// Remaining credit/prepaid balance for a provider that has no `providerCost` (e.g. Amp's
+    /// individual + workspace credit balances). Only the widget's generic credits row reads
+    /// this today; menu-card rendering is untouched by design to avoid an unrequested new
+    /// "Extra usage" section appearing for those providers.
+    public let creditsRemaining: Double?
 
     private enum CodingKeys: String, CodingKey {
         case primary
@@ -185,6 +190,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case accountEmail
         case accountOrganization
         case loginMethod
+        case creditsRemaining
     }
 
     public init(
@@ -208,7 +214,8 @@ public struct UsageSnapshot: Codable, Sendable {
         subscriptionRenewsAt: Date? = nil,
         updatedAt: Date,
         identity: ProviderIdentitySnapshot? = nil,
-        dataConfidence: UsageDataConfidence = .unknown)
+        dataConfidence: UsageDataConfidence = .unknown,
+        creditsRemaining: Double? = nil)
     {
         precondition(
             details.count <= ProviderDetailSection.maximumSectionsPerSnapshot,
@@ -234,6 +241,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.updatedAt = updatedAt
         self.identity = identity
         self.dataConfidence = dataConfidence
+        self.creditsRemaining = creditsRemaining
     }
 
     public func with(extraRateWindows: [NamedRateWindow]?) -> UsageSnapshot {
@@ -305,6 +313,7 @@ public struct UsageSnapshot: Codable, Sendable {
                 self.identity = nil
             }
         }
+        self.creditsRemaining = try container.decodeIfPresent(Double.self, forKey: .creditsRemaining)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -328,6 +337,7 @@ public struct UsageSnapshot: Codable, Sendable {
         if self.dataConfidence != .unknown {
             try container.encode(self.dataConfidence, forKey: .dataConfidence)
         }
+        try container.encodeIfPresent(self.creditsRemaining, forKey: .creditsRemaining)
         try container.encodeIfPresent(self.identity?.accountEmail, forKey: .accountEmail)
         try container.encodeIfPresent(self.identity?.accountOrganization, forKey: .accountOrganization)
         try container.encodeIfPresent(self.identity?.loginMethod, forKey: .loginMethod)
@@ -499,7 +509,8 @@ public struct UsageSnapshot: Codable, Sendable {
             subscriptionRenewsAt: subscriptionRenewsAt.resolving(self.subscriptionRenewsAt),
             updatedAt: self.updatedAt,
             identity: identity.resolving(self.identity),
-            dataConfidence: dataConfidence.resolving(self.dataConfidence))
+            dataConfidence: dataConfidence.resolving(self.dataConfidence),
+            creditsRemaining: self.creditsRemaining)
     }
 }
 

@@ -647,6 +647,7 @@ extension UsageStore {
         outcome: ProviderFetchOutcome,
         context: ProviderRefreshOutcomeContext) async
     {
+        let wasFailing = self.errors[provider.instanceID] != nil
         switch outcome.result {
         case let .success(result):
             await self.applyProviderRefreshSuccess(
@@ -661,6 +662,22 @@ extension UsageStore {
                 attempts: outcome.attempts,
                 context: context)
         }
+        self.logProviderFetchTransition(provider: provider, wasFailing: wasFailing)
+    }
+
+    /// Not verbose-gated, so a fetch outcome flip is visible in Console (and persisted by unified
+    /// logging, hence warning level) without turning on verbose logging (D3). Provider id and error
+    /// description only, never token/key values. Shared by the generic refresh path and the
+    /// Codex managed-account path, which sets `errors[.codex]` directly.
+    func logProviderFetchTransition(provider: UsageProvider, wasFailing: Bool) {
+        let isFailing = self.errors[provider.instanceID] != nil
+        guard wasFailing != isFailing else { return }
+        self.providerLogger.warning(
+            isFailing ? "Provider fetch started failing" : "Provider fetch recovered",
+            metadata: [
+                "provider": provider.rawValue,
+                "error": isFailing ? (self.errors[provider.instanceID] ?? "") : "",
+            ])
     }
 
     private func applyProviderRefreshSuccess(

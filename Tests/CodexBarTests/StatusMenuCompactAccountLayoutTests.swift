@@ -1,13 +1,13 @@
 import AppKit
 import CodexBarCore
 import Foundation
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// Coverage for the compact multi-account layout on the token-account and Codex
 /// paths (the claude-swap path is covered by StatusMenuClaudeSwapCompactTests).
 @MainActor
-final class StatusMenuCompactAccountLayoutTests: XCTestCase {
+final class StatusMenuCompactAccountLayoutTests {
     private func disableMenuCardsForTesting() {
         StatusItemController.menuCardRenderingEnabled = false
         StatusItemController.setMenuRefreshEnabledForTesting(false)
@@ -42,6 +42,7 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
             identity: nil)
     }
 
+    @Test
     func test_tokenAccountsUseCompactLayoutAtFourOrMoreAccounts() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -77,7 +78,7 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
         // Active card + critical row + best-candidate row + two healthy rows folded.
         let ids = menu.items.compactMap { $0.representedObject as? String }
             .filter { $0.hasPrefix("tokenAccount") || $0.hasPrefix("menuCard") }
-        XCTAssertEqual(ids, [
+        #expect(ids == [
             "tokenAccountCard-\(accounts[0].id.uuidString)",
             "tokenAccountCompact-\(accounts[1].id.uuidString)",
             "tokenAccountCompact-\(accounts[2].id.uuidString)",
@@ -85,6 +86,7 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
         ])
     }
 
+    @Test
     func test_tokenAccountsBelowThresholdKeepStackedCards() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -117,9 +119,10 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
 
         let ids = menu.items.compactMap { $0.representedObject as? String }
             .filter { $0.hasPrefix("tokenAccount") || $0.hasPrefix("menuCard") }
-        XCTAssertEqual(ids, ["menuCard-0", "menuCard-1", "menuCard-2"])
+        #expect(ids == ["menuCard-0", "menuCard-1", "menuCard-2"])
     }
 
+    @Test
     func test_codexAccountProjectionMapsActiveHealthAndIdentity() {
         let accounts = (1...4).map { index in
             CodexVisibleAccount(
@@ -148,18 +151,19 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
 
         let projected = StatusItemController.projectedCodexAccounts(display: display)
 
-        XCTAssertEqual(projected.map(\ProviderAccountUsageSnapshot.id.opaqueID), [
+        #expect(projected.map(\ProviderAccountUsageSnapshot.id.opaqueID) == [
             "account-1", "account-2", "account-3", "account-4",
         ])
-        XCTAssertEqual(projected.map(\ProviderAccountUsageSnapshot.isActive), [false, true, false, false])
-        XCTAssertEqual(projected[0].id.source, "codex-account")
-        XCTAssertEqual(projected[0].displayLabel, "codex1@example.com")
+        #expect(projected.map(\ProviderAccountUsageSnapshot.isActive) == [false, true, false, false])
+        #expect(projected[0].id.source == "codex-account")
+        #expect(projected[0].displayLabel == "codex1@example.com")
         // account-4 has no snapshot: unavailable health surfaces as an error row.
-        XCTAssertNil(projected[3].snapshot)
-        XCTAssertNotNil(projected[3].error)
-        XCTAssertNil(projected[0].error)
+        #expect(projected[3].snapshot == nil)
+        #expect(projected[3].error != nil)
+        #expect(projected[0].error == nil)
     }
 
+    @Test
     func test_codexAccountProjectionIncludesMonthlyCreditInPlanningSnapshot() {
         let account = CodexVisibleAccount(
             id: "biz-1",
@@ -207,13 +211,13 @@ final class StatusMenuCompactAccountLayoutTests: XCTestCase {
         let shown = StatusItemController.projectedCodexAccounts(
             display: display,
             includeOptionalCredits: true)
-        XCTAssertEqual(AccountMenuLayoutPlanner.headroomPercent(for: shown[0]), 5)
-        XCTAssertEqual(shown[0].snapshot?.tertiary?.usedPercent, 95)
+        #expect(AccountMenuLayoutPlanner.headroomPercent(for: shown[0]) == 5)
+        #expect(shown[0].snapshot?.tertiary?.usedPercent == 95)
 
         let hidden = StatusItemController.projectedCodexAccounts(
             display: display,
             includeOptionalCredits: false)
-        XCTAssertNil(AccountMenuLayoutPlanner.headroomPercent(for: hidden[0]))
-        XCTAssertNil(hidden[0].snapshot?.tertiary)
+        #expect(AccountMenuLayoutPlanner.headroomPercent(for: hidden[0]) == nil)
+        #expect(hidden[0].snapshot?.tertiary == nil)
     }
 }

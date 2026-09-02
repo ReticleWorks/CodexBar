@@ -1467,6 +1467,9 @@ extension UsageStore {
         generation: UInt64? = nil) async
     {
         guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
+        let wasFailingBeforeOutcome = self.errors[.codex] != nil
+        // Deferred so the early returns inside the switch (generation guard, missing snapshot) still log the flip.
+        defer { self.logProviderFetchTransition(provider: .codex, wasFailing: wasFailingBeforeOutcome) }
         switch outcome.result {
         case let .success(result):
             guard let snapshot else { return }
@@ -1524,7 +1527,14 @@ extension UsageStore {
                     .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
             if shouldSurface {
                 self.errors[.codex] = message
-                self.snapshots.removeValue(forKey: .codex)
+                // The active source account has no usable data of its own. Blanking the
+                // provider-wide ambient snapshot to nothing hides every other visible account's
+                // healthy usage too. Fall back to this account's own last-good row, then to any
+                // other healthy visible account, so the menu/widget keep showing real numbers.
+                self.snapshots[.codex] =
+                    self.codexAccountSnapshots.first(where: { $0.id == account.id })?.snapshot
+                        ?? self.codexAccountSnapshots.first(where: { $0.snapshot != nil && $0.error == nil })?
+                        .snapshot
             } else {
                 self.errors[.codex] = nil
             }

@@ -48,6 +48,45 @@ struct CodexProfileHomeAccountTests {
     }
 
     @Test
+    func `active source resolves to a non-first profile home sharing the ambient identity`() throws {
+        // Regression for a live config with codexProfileHomePaths = [harness, satchmo-marvin,
+        // infra] where all three (ambient + harness + satchmo-marvin) share one identity and the
+        // persisted active source names satchmo-marvin (not the first same-identity path). Before
+        // the fix, the first path in array order permanently claimed the merged draft's
+        // selectionSource, so no draft's selectionSource ever equaled the active source's path,
+        // activeVisibleAccountID resolved to nil, and the menu/widget's ambient snapshot froze.
+        let live = ObservedSystemCodexAccount(
+            email: "user@example.com",
+            workspaceAccountID: "account-user",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date())
+        let harness = ObservedSystemCodexAccount(
+            email: "user@example.com",
+            workspaceAccountID: "account-user",
+            codexHomePath: "/Users/test/.codex-harness",
+            observedAt: Date())
+        let satchmoMarvin = ObservedSystemCodexAccount(
+            email: "user@example.com",
+            workspaceAccountID: "account-user",
+            codexHomePath: "/Users/test/.codex-satchmo-marvin",
+            observedAt: Date())
+        let projection = CodexVisibleAccountProjection.make(from: CodexAccountReconciliationSnapshot(
+            storedAccounts: [],
+            activeStoredAccount: nil,
+            liveSystemAccount: live,
+            profileHomeAccounts: [harness, satchmoMarvin],
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .profileHome(path: "/Users/test/.codex-satchmo-marvin"),
+            hasUnreadableAddedAccountStore: false))
+        let account = try #require(projection.visibleAccounts.first)
+
+        #expect(projection.visibleAccounts.count == 1)
+        #expect(account.selectionSource == .profileHome(path: "/Users/test/.codex-satchmo-marvin"))
+        #expect(account.isActive)
+        #expect(projection.activeVisibleAccountID == account.id)
+    }
+
+    @Test
     @MainActor
     func `settings store discovers configured codex profile homes`() throws {
         let suite = "CodexProfileHomeAccountTests-discovery"

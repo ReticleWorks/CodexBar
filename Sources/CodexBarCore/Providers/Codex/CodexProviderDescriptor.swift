@@ -356,6 +356,31 @@ struct CodexOAuthNativeRefreshCLIStrategy: ProviderFetchStrategy {
     }
 }
 
+/// A one-shot CLI invocation can't afford to sit through the full 30s-per-request OAuth/PAT
+/// network timeout (let alone two chained requests): unlike the long-lived app, it has no
+/// repeated-spawn risk to guard against, so bound the whole attempt and surface it as the same
+/// `.networkError` the existing `shouldFallback` logic already treats as CLI-fallback-eligible.
+enum CodexCLIFetchWatchdog {
+    static let grace: Duration = .seconds(10)
+
+    static func run<Value: Sendable>(
+        runtime: ProviderRuntime,
+        grace: Duration = Self.grace,
+        _ operation: @escaping @Sendable () async throws -> Value) async throws -> Value
+    {
+        guard runtime == .cli else { return try await operation() }
+        let task = Task { try await operation() }
+        switch await BoundedTaskJoin(sourceTask: task).value(joinGrace: grace) {
+        case let .value(value):
+            return value
+        case let .failure(error):
+            throw error
+        case .timedOut:
+            throw CodexOAuthFetchError.networkError(URLError(.timedOut))
+        }
+    }
+}
+
 struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     let id: String = "codex.oauth"
     let kind: ProviderFetchKind = .oauth
@@ -370,7 +395,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         let credentials = try CodexOAuthCredentialsStore.loadForUsage(
             env: context.env,
             allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
-        return try await Self.fetch(context: context, credentials: credentials)
+        return try await CodexCLIFetchWatchdog.run(runtime: context.runtime) {
+            try await Self.fetch(context: context, credentials: credentials)
+        }
     }
 
     private static func fetch(
@@ -462,13 +489,18 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         // Auto mode may launch the CLI as the next strategy. Keep that fallback
         // limited to OAuth states the CLI can actually repair, otherwise
         // transient API or decode failures can spawn `codex app-server`
-        // repeatedly instead of surfacing the original OAuth failure.
+        // repeatedly instead of surfacing the original OAuth failure. A one-shot
+        // CLI invocation has no repeated-spawn risk to guard against (unlike the
+        // long-lived app), so an unreachable network there should still fall
+        // through to the local CLI strategy instead of surfacing a hung network error.
         if let fetchError = error as? CodexOAuthFetchError {
             switch fetchError {
             case .unauthorized:
                 return true
-            case .invalidResponse, .serverError, .networkError:
+            case .invalidResponse, .serverError:
                 return false
+            case .networkError:
+                return context.runtime == .cli
             }
         }
         if let credentialsError = error as? CodexOAuthCredentialsError {
@@ -482,7 +514,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         switch error as? CodexTokenRefresher.RefreshError {
         case .expired, .revoked, .reused:
             return true
-        case .networkError, .invalidResponse, .none:
+        case .networkError:
+            return context.runtime == .cli
+        case .invalidResponse, .none:
             return false
         }
     }

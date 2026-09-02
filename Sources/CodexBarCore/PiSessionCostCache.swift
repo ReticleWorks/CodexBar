@@ -5,7 +5,8 @@ enum PiSessionCostCacheIO {
     private static let artifactVersion = 8
 
     private static func defaultCacheRoot() -> URL {
-        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        CostUsageCacheMigration.migrateIfNeeded()
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return root.appendingPathComponent("CodexBar", isDirectory: true)
     }
 

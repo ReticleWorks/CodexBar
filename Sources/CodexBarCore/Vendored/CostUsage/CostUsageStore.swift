@@ -13,6 +13,27 @@ package enum CostUsageStoreExecutorTestControl {
         Self.suppressCurrentContextArgument)
 }
 
+/// The `CodexBar/cost-usage` directory (sqlite store, Claude/Vertex JSON caches, pi-session
+/// cache) moved from `~/Library/Caches` to `~/Library/Application Support` because Caches is
+/// OS-purgeable and the 30-day history isn't fully recoverable once cleared. This does the
+/// one-time move so an existing on-disk cache isn't silently rebuilt from scratch.
+package enum CostUsageCacheMigration {
+    package static func migrateIfNeeded(fileManager: FileManager = .default) {
+        guard
+            let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first,
+            let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return }
+        let old = caches.appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent("cost-usage", isDirectory: true)
+        let new = support.appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent("cost-usage", isDirectory: true)
+        guard fileManager.fileExists(atPath: old.path), !fileManager.fileExists(atPath: new.path) else { return }
+        try? fileManager.createDirectory(
+            at: new.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fileManager.moveItem(at: old, to: new)
+    }
+}
+
 /// Single-writer persistence for Codex cost scanning. The actor owns the only writable
 /// connection; Phase 2 can keep its existing scan-queue serialization while independent
 /// app and CLI readers use WAL snapshots through separate read-only connections.
@@ -99,15 +120,23 @@ actor CostUsageStore {
 
     /// Test-only crash injection: invoked inside `saveCodexCache`'s transaction after each
     /// persisted file with the running count, so a crash-safety harness can SIGKILL the
-    /// process at a deterministic mid-save point. Never set in production.
-    nonisolated(unsafe) static var saveCycleCheckpointForTesting: ((Int) -> Void)?
+    /// process at a deterministic mid-save point. Never set in production. Scoped to one
+    /// database so unrelated stores running concurrently in the same test process never
+    /// observe each other's save cycles.
+    nonisolated(unsafe) static var saveCycleCheckpointForTesting: (
+        databaseURL: URL,
+        checkpoint: (Int) -> Void)?
     /// Test-only interleaving point scoped to one database so parallel store fixtures stay isolated.
     nonisolated(unsafe) static var identicalContentPreLockCheckpointForTesting: (
         databaseURL: URL,
         checkpoint: () -> Void)?
 
-    /// Test-only traversal proof for persisted Codex catch-up reconciliation. Never set in production.
-    nonisolated(unsafe) static var codexCatchUpReconciliationVisitForTesting: (() -> Void)?
+    /// Test-only traversal proof for persisted Codex catch-up reconciliation. Never set in
+    /// production. Scoped to one database so unrelated stores running concurrently in the
+    /// same test process never observe each other's reconciliation visits.
+    nonisolated(unsafe) static var codexCatchUpReconciliationVisitForTesting: (
+        databaseURL: URL,
+        visit: () -> Void)?
 
     /// Process-wide serialization keeps every writable store connection on the same queue.
     /// This matches the scan pipeline's single-writer contract without multiplying executor
@@ -134,7 +163,8 @@ actor CostUsageStore {
         schemaVersion: Int32 = CostUsageStore.schemaVersion,
         parserHash: String = CodexParserHash.value)
     {
-        let root = cacheRoot ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        if cacheRoot == nil { CostUsageCacheMigration.migrateIfNeeded() }
+        let root = cacheRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("CodexBar", isDirectory: true)
         self.databaseURL = root
             .appendingPathComponent("cost-usage", isDirectory: true)

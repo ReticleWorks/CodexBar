@@ -348,5 +348,23 @@ struct CodexPATTests {
         #expect(strategy.shouldFallback(on: CodexOAuthCredentialsError.missingTokens, context: auto))
         #expect(!strategy.shouldFallback(on: CodexOAuthFetchError.invalidResponse, context: auto))
         #expect(!strategy.shouldFallback(on: CodexOAuthFetchError.serverError(500, nil), context: auto))
+        // The long-lived app avoids repeatedly falling back on a network error (it would
+        // respawn `codex app-server` on every background refresh tick), but a one-shot CLI
+        // invocation has no such repeat-spawn risk and should still reach the local CLI
+        // strategy instead of surfacing a hung network error.
+        #expect(!strategy.shouldFallback(on: CodexOAuthFetchError.networkError(URLError(.timedOut)), context: auto))
+        let autoCLI = ProviderFetchContext(
+            runtime: .cli,
+            sourceMode: .auto,
+            includeCredits: true,
+            webTimeout: 60,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: [:],
+            settings: nil,
+            fetcher: UsageFetcher(),
+            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+            browserDetection: browserDetection)
+        #expect(strategy.shouldFallback(on: CodexOAuthFetchError.networkError(URLError(.timedOut)), context: autoCLI))
     }
 }

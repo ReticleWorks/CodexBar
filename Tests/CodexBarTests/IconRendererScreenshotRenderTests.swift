@@ -1,6 +1,7 @@
 import AppKit
 import CodexBarCore
-import XCTest
+import Foundation
+import Testing
 @testable import CodexBar
 
 /// Developer tool, skipped by default: renders a synthetic single-quota icon for PR proof.
@@ -9,12 +10,13 @@ import XCTest
 ///   CODEXBAR_ICON_SCREENSHOT_DIR=docs/screenshots \
 ///     swift test --filter IconRendererScreenshotRenderTests
 @MainActor
-final class IconRendererScreenshotRenderTests: XCTestCase {
+final class IconRendererScreenshotRenderTests {
     private static let canvasSize = NSSize(width: 360, height: 240)
 
+    @Test
     func test_renderSyntheticMergedWarpTransition() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_WARP_ICON_PROOF_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_WARP_ICON_PROOF_DIR to render the merged Warp proof.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -38,17 +40,16 @@ final class IconRendererScreenshotRenderTests: XCTestCase {
                 quotaLayoutPolicy: .provider(.warp))
         }
 
-        let data = try XCTUnwrap(
-            Self.warpTransitionProofPNG(exhausted: icon(usedBonus: 100), unused: icon(usedBonus: 0)),
-            "merged Warp proof render failed")
+        let data = try #require(Self.warpTransitionProofPNG(exhausted: icon(usedBonus: 100), unused: icon(usedBonus: 0)), "merged Warp proof render failed")
         let url = directory.appendingPathComponent("merged-warp-bonus-transition.png")
         try data.write(to: url, options: .atomic)
         print("Wrote \(url.path)")
     }
 
+    @Test
     func test_renderSyntheticSingleQuotaIcon() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_ICON_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_ICON_SCREENSHOT_DIR to render the synthetic icon proof.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -61,7 +62,7 @@ final class IconRendererScreenshotRenderTests: XCTestCase {
             style: .combined,
             hideCritters: true,
             quotaLayoutPolicy: .provider(.codex))
-        let data = try XCTUnwrap(Self.proofPNG(icon: icon), "synthetic icon proof render failed")
+        let data = try #require(Self.proofPNG(icon: icon), "synthetic icon proof render failed")
         let url = directory.appendingPathComponent("codex-single-quota-icon.png")
         try data.write(to: url, options: .atomic)
         print("Wrote \(url.lastPathComponent)")

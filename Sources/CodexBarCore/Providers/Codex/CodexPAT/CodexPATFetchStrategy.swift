@@ -11,14 +11,16 @@ struct CodexPATFetchStrategy: ProviderFetchStrategy {
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let credentialEnv = Self.credentialEnvironment(context.env)
         let credentials = try CodexOAuthCredentialsStore.loadPAT(env: credentialEnv)
-        let fetched = try await CodexPATUsageFetcher.fetchUsage(
-            credentials: credentials,
-            cliVersion: Self.resolvedCLIVersion(context: context),
-            env: credentialEnv)
-        return try Self.makeResult(
-            usageResponse: fetched.usage,
-            whoami: fetched.whoami,
-            updatedAt: Date())
+        return try await CodexCLIFetchWatchdog.run(runtime: context.runtime) {
+            let fetched = try await CodexPATUsageFetcher.fetchUsage(
+                credentials: credentials,
+                cliVersion: Self.resolvedCLIVersion(context: context),
+                env: credentialEnv)
+            return try Self.makeResult(
+                usageResponse: fetched.usage,
+                whoami: fetched.whoami,
+                updatedAt: Date())
+        }
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
@@ -27,8 +29,13 @@ struct CodexPATFetchStrategy: ProviderFetchStrategy {
             switch fetchError {
             case .unauthorized:
                 return true
-            case .invalidResponse, .serverError, .networkError:
+            case .invalidResponse, .serverError:
                 return false
+            case .networkError:
+                // A one-shot CLI invocation has no repeated-app-server-spawn risk to guard
+                // against (unlike the long-lived app), so let an unreachable network fall
+                // through to the local CLI strategy instead of hanging on a dead connection.
+                return context.runtime == .cli
             }
         }
         if let credentialsError = error as? CodexOAuthCredentialsError {

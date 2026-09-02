@@ -1,3 +1,5 @@
+import AppKit
+import Foundation
 import CodexBarCore
 import Testing
 @testable import CodexBar
@@ -37,7 +39,7 @@ struct FloatingUsageMetricTests {
 
     @Test
     func `used metric preserves vendor reported usage`() throws {
-        let window = RateWindow(usedPercent: 82, windowMinutes: 300, resetsAt: nil)
+        let window = RateWindow(usedPercent: 82, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
         let metric = try #require(FloatingUsageMetric.resolve(window: window, showsUsed: true))
 
         #expect(metric.usedPercent == 82)
@@ -49,7 +51,7 @@ struct FloatingUsageMetricTests {
 
     @Test
     func `remaining metric inverts without changing risk`() throws {
-        let window = RateWindow(usedPercent: 82, windowMinutes: 300, resetsAt: nil)
+        let window = RateWindow(usedPercent: 82, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
         let metric = try #require(FloatingUsageMetric.resolve(window: window, showsUsed: false))
 
         #expect(metric.usedPercent == 82)
@@ -61,8 +63,8 @@ struct FloatingUsageMetricTests {
 
     @Test
     func `sidebar uses the most constrained quota lane`() throws {
-        let freshSession = RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil)
-        let constrainedWeekly = RateWindow(usedPercent: 41, windowMinutes: 10080, resetsAt: nil)
+        let freshSession = RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
+        let constrainedWeekly = RateWindow(usedPercent: 41, windowMinutes: 10080, resetsAt: nil, resetDescription: nil)
         let selected = try #require(FloatingUsageMetric.mostConstrainedWindow([
             freshSession,
             constrainedWeekly,
@@ -74,9 +76,9 @@ struct FloatingUsageMetricTests {
 
     @Test
     func `claude scoped model lane can drive sidebar warning`() throws {
-        let session = RateWindow(usedPercent: 3, windowMinutes: 300, resetsAt: nil)
-        let weekly = RateWindow(usedPercent: 65, windowMinutes: 10080, resetsAt: nil)
-        let fable = RateWindow(usedPercent: 87, windowMinutes: 10080, resetsAt: nil)
+        let session = RateWindow(usedPercent: 3, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
+        let weekly = RateWindow(usedPercent: 65, windowMinutes: 10080, resetsAt: nil, resetDescription: nil)
+        let fable = RateWindow(usedPercent: 87, windowMinutes: 10080, resetsAt: nil, resetDescription: nil)
         let selected = try #require(FloatingUsageMetric.mostConstrainedWindow([session, weekly, fable]))
 
         #expect(selected.usedPercent == 87)
@@ -95,8 +97,8 @@ struct FloatingUsageMetricTests {
                 updatedAt: Date()),
             updatedAt: Date())
         let subscription = UsageSnapshot(
-            primary: RateWindow(usedPercent: 27, windowMinutes: 300, resetsAt: nil),
-            secondary: RateWindow(usedPercent: 6, windowMinutes: 10080, resetsAt: nil),
+            primary: RateWindow(usedPercent: 27, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 6, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
             updatedAt: Date())
         let account = ProviderAccountUsageSnapshot(
             id: ProviderAccountIdentity(source: "claude-swap", opaqueID: "3"),
@@ -119,7 +121,7 @@ struct FloatingUsageMetricTests {
 
     @Test
     func `over limit remaining metric does not go negative`() throws {
-        let window = RateWindow(usedPercent: 125, windowMinutes: nil, resetsAt: nil)
+        let window = RateWindow(usedPercent: 125, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
         let metric = try #require(FloatingUsageMetric.resolve(window: window, showsUsed: false))
 
         #expect(metric.displayedPercent == 0)
