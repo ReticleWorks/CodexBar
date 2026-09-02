@@ -631,6 +631,13 @@ private struct Fixture {
     }
 
     func remove() {
+        // `UserProviderPluginRegistry` is process-global state. `refresh(loader:)` in the tests
+        // above populates it with fixture plugins (e.g. "acme-meter") that would otherwise leak
+        // into every other suite sharing this test process. Point it at a fresh empty directory
+        // so it discovers nothing, restoring the registry to empty before the next suite runs.
+        _ = UserProviderPluginRegistry.refresh(loader: UserProviderPluginLoader(
+            providersDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("UserProviderPluginTests-empty-\(UUID().uuidString)", isDirectory: true)))
         try? FileManager.default.removeItem(at: self.root)
     }
 }

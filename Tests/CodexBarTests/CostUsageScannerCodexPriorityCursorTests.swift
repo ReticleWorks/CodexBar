@@ -435,7 +435,9 @@ struct CostUsageScannerCodexPriorityCursorTests {
         #expect(firstCursor.lastRowID == 1)
 
         var persistedFileCount = 0
-        CostUsageStore.saveCycleCheckpointForTesting = { _ in persistedFileCount += 1 }
+        CostUsageStore.saveCycleCheckpointForTesting = (
+            databaseURL: CostUsageStore(cacheRoot: env.cacheRoot).databaseURL,
+            checkpoint: { _ in persistedFileCount += 1 })
         defer { CostUsageStore.saveCycleCheckpointForTesting = nil }
 
         try CostUsageScannerCodexPriorityTests.insertTestLogs(dbURL: dbURL, rows: (0..<3).map { index in

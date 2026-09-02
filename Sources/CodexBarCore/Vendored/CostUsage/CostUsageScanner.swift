@@ -24,8 +24,14 @@ enum CostUsageScanner {
     /// this value records that lineage exists but this rollout owns its counter or suffix.
     static let codexForkDependencyNotRequiredKey = "mode:lineage-only:v1"
 
-    static func resetCodexDirectoryCursorsForTesting() {
-        self.codexDirectoryCursorRegistry.reset()
+    /// Test-only: simulates an app relaunch losing its in-memory directory read cursors.
+    /// Scoped to `underRoots` (the calling test's own session roots) so this never evicts an
+    /// unrelated test's live cursor when both run concurrently in the same process — an
+    /// unscoped wipe here forces the other test's next paged read to reopen its directory and
+    /// re-walk past everything already visited, burning its whole visit budget on entries it
+    /// had already seen and discovering nothing new that pass.
+    static func resetCodexDirectoryCursorsForTesting(underRoots roots: [URL]) {
+        self.codexDirectoryCursorRegistry.reset(underRoots: roots)
     }
 
     final class CodexSessionHeadParseObserverStore: @unchecked Sendable {
@@ -2567,10 +2573,15 @@ enum CostUsageScanner {
                 visits: visits)
         }
 
-        func reset() {
+        func reset(underRoots roots: [URL]) {
+            let prefixes = roots.map { $0.standardizedFileURL.path }
             self.lock.lock()
-            self.cursors.removeAll()
-            self.lock.unlock()
+            defer { self.lock.unlock() }
+            for path in self.cursors.keys
+                where prefixes.contains(where: { path == $0 || path.hasPrefix($0 + "/") })
+            {
+                self.cursors.removeValue(forKey: path)
+            }
         }
     }
 

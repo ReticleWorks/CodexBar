@@ -120,15 +120,23 @@ actor CostUsageStore {
 
     /// Test-only crash injection: invoked inside `saveCodexCache`'s transaction after each
     /// persisted file with the running count, so a crash-safety harness can SIGKILL the
-    /// process at a deterministic mid-save point. Never set in production.
-    nonisolated(unsafe) static var saveCycleCheckpointForTesting: ((Int) -> Void)?
+    /// process at a deterministic mid-save point. Never set in production. Scoped to one
+    /// database so unrelated stores running concurrently in the same test process never
+    /// observe each other's save cycles.
+    nonisolated(unsafe) static var saveCycleCheckpointForTesting: (
+        databaseURL: URL,
+        checkpoint: (Int) -> Void)?
     /// Test-only interleaving point scoped to one database so parallel store fixtures stay isolated.
     nonisolated(unsafe) static var identicalContentPreLockCheckpointForTesting: (
         databaseURL: URL,
         checkpoint: () -> Void)?
 
-    /// Test-only traversal proof for persisted Codex catch-up reconciliation. Never set in production.
-    nonisolated(unsafe) static var codexCatchUpReconciliationVisitForTesting: (() -> Void)?
+    /// Test-only traversal proof for persisted Codex catch-up reconciliation. Never set in
+    /// production. Scoped to one database so unrelated stores running concurrently in the
+    /// same test process never observe each other's reconciliation visits.
+    nonisolated(unsafe) static var codexCatchUpReconciliationVisitForTesting: (
+        databaseURL: URL,
+        visit: () -> Void)?
 
     /// Process-wide serialization keeps every writable store connection on the same queue.
     /// This matches the scan pipeline's single-writer contract without multiplying executor
