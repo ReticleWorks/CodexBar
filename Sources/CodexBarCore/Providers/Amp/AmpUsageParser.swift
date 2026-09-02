@@ -39,6 +39,20 @@ enum AmpUsageParser {
             #"(?im)^\s*Subscription\s+(.+?):"# + subscriptionSuffix,
             #"(?im)^\s*Amp\s+(.+?)\s+Subscription:"# + subscriptionSuffix,
         ]
+        // Current Amp billing text ("agent usage $X of $Y remaining (Z%), orb usage Ah of Bh <tier> orb
+        // hours remaining (W%) - period ... , resets upon renewal in N days/months"). Percentages are
+        // reported explicitly, unlike the legacy percent-only format above.
+        let subscriptionSuffixV2 = #"\s*agent usage\s*\$?"# + amountPattern +
+            #"\s*of\s*\$?"# + amountPattern +
+            #"\s*remaining\s*\(\s*"# + amountPattern + #"\s*%\s*\)"# +
+            #"\s*,\s*orb usage\s*"# + amountPattern + #"h?\s*of\s*"# + amountPattern +
+            #"h?\s+[^,]*?remaining\s*\(\s*"# + amountPattern + #"\s*%\s*\)"# +
+            #"\s*-\s*(?:period\s+\S+\s+to\s+\S+\s*,\s*)?resets\s+upon\s+renewal\s+in\s+"# +
+            #"([0-9][0-9,]*)\s+(days?|months?)(?:\s+-\s+https?://\S+)?\s*$"#
+        let subscriptionPatternsV2 = [
+            #"(?im)^\s*Subscription\s+(.+?):"# + subscriptionSuffixV2,
+            #"(?im)^\s*Amp\s+(.+?)\s+Subscription:"# + subscriptionSuffixV2,
+        ]
         let creditsPattern = #"(?im)^\s*Individual credits:\s*\$?"# + amountPattern + #"\s+remaining"#
         let individualCredits = self.captures(in: text, pattern: creditsPattern)?.first
             .flatMap(self.number(from:))
@@ -81,30 +95,9 @@ enum AmpUsageParser {
                 resetDescription: self.nonEmpty(free[1]).map { _ in "resets daily" })
         }()
         let resolvedFreeUsage = freeUsage ?? freePercentUsage
-        let subscriptionUsage: AmpSubscriptionUsage? = {
-            guard let subscription = subscriptionPatterns.lazy.compactMap({ pattern in
-                self.captures(in: text, pattern: pattern)
-            }).first,
-                subscription.count == 5,
-                let plan = self.nonEmpty(subscription[0]),
-                let otherRemaining = self.number(from: subscription[1]),
-                let orbRemaining = self.number(from: subscription[2]),
-                let renewalValue = Int(subscription[3].replacingOccurrences(of: ",", with: "")),
-                let resetsAt = self.subscriptionResetDate(
-                    value: renewalValue,
-                    unit: subscription[4],
-                    now: now)
-            else { return nil }
-            let unit = subscription[4].lowercased()
-            let singularUnit = unit.hasPrefix("month") ? "month" : "day"
-            let resetDescription = "renews in \(renewalValue) \(singularUnit)\(renewalValue == 1 ? "" : "s")"
-            return AmpSubscriptionUsage(
-                plan: plan,
-                otherUsedPercent: 100 - min(100, max(0, otherRemaining)),
-                orbUsedPercent: 100 - min(100, max(0, orbRemaining)),
-                resetsAt: resetsAt,
-                resetDescription: resetDescription)
-        }()
+        let subscriptionUsage: AmpSubscriptionUsage? =
+            self.parseSubscriptionV2(subscriptionPatternsV2, text: text, now: now) ??
+            self.parseSubscriptionLegacy(subscriptionPatterns, text: text, now: now)
         guard resolvedFreeUsage != nil || subscriptionUsage != nil || individualCredits != nil ||
             !workspaceBalances.isEmpty
         else {
@@ -130,6 +123,60 @@ enum AmpUsageParser {
             return Calendar(identifier: .gregorian).date(byAdding: .month, value: value, to: now)
         }
         return now.addingTimeInterval(TimeInterval(value) * 24 * 60 * 60)
+    }
+
+    private static func subscriptionResetDescription(renewalValue: Int, unit: String) -> String {
+        let singularUnit = unit.lowercased().hasPrefix("month") ? "month" : "day"
+        return "renews in \(renewalValue) \(singularUnit)\(renewalValue == 1 ? "" : "s")"
+    }
+
+    /// Legacy percent-only format: "<plan>: X% other usage and Y% orb usage remaining - resets upon renewal in N".
+    private static func parseSubscriptionLegacy(
+        _ patterns: [String],
+        text: String,
+        now: Date) -> AmpSubscriptionUsage?
+    {
+        guard let subscription = patterns.lazy.compactMap({ pattern in
+            self.captures(in: text, pattern: pattern)
+        }).first,
+            subscription.count == 5,
+            let plan = self.nonEmpty(subscription[0]),
+            let otherRemaining = self.number(from: subscription[1]),
+            let orbRemaining = self.number(from: subscription[2]),
+            let renewalValue = Int(subscription[3].replacingOccurrences(of: ",", with: "")),
+            let resetsAt = self.subscriptionResetDate(value: renewalValue, unit: subscription[4], now: now)
+        else { return nil }
+        return AmpSubscriptionUsage(
+            plan: plan,
+            otherUsedPercent: 100 - min(100, max(0, otherRemaining)),
+            orbUsedPercent: 100 - min(100, max(0, orbRemaining)),
+            resetsAt: resetsAt,
+            resetDescription: self.subscriptionResetDescription(renewalValue: renewalValue, unit: subscription[4]))
+    }
+
+    /// Current format: "<plan>: agent usage $X of $Y remaining (Z%), orb usage Ah of Bh <tier> orb hours
+    /// remaining (W%) - period ..., resets upon renewal in N days/months". Percentages are explicit.
+    private static func parseSubscriptionV2(
+        _ patterns: [String],
+        text: String,
+        now: Date) -> AmpSubscriptionUsage?
+    {
+        guard let subscription = patterns.lazy.compactMap({ pattern in
+            self.captures(in: text, pattern: pattern)
+        }).first,
+            subscription.count == 9,
+            let plan = self.nonEmpty(subscription[0]),
+            let agentRemainingPercent = self.number(from: subscription[3]),
+            let orbRemainingPercent = self.number(from: subscription[6]),
+            let renewalValue = Int(subscription[7].replacingOccurrences(of: ",", with: "")),
+            let resetsAt = self.subscriptionResetDate(value: renewalValue, unit: subscription[8], now: now)
+        else { return nil }
+        return AmpSubscriptionUsage(
+            plan: plan,
+            otherUsedPercent: 100 - min(100, max(0, agentRemainingPercent)),
+            orbUsedPercent: 100 - min(100, max(0, orbRemainingPercent)),
+            resetsAt: resetsAt,
+            resetDescription: self.subscriptionResetDescription(renewalValue: renewalValue, unit: subscription[8]))
     }
 
     private struct FreeTierUsage {
