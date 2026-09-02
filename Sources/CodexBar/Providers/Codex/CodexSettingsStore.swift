@@ -19,7 +19,54 @@ extension SettingsStore {
     }
 
     private static func normalizedCodexProfileHomePaths(_ paths: [String]?) -> [String] {
-        CodexHomeScope.discoveredHomePaths(configured: paths)
+        let discovered = CodexHomeScope.discoveredHomePaths(configured: paths)
+        let extraHomes = Self.mirrorCodexCredentials(liveHomePaths: discovered)
+        guard !extraHomes.isEmpty else { return discovered }
+        var seen = Set(discovered)
+        return discovered + extraHomes.filter { seen.insert($0).inserted }
+    }
+
+    /// Mirrors each live home's `auth.json` into a per-account backup (see
+    /// `CodexCredentialMirror`) and returns any mirror directories that should stand in as extra
+    /// profile homes because no live home currently holds that account. Live homes always win.
+    private static func mirrorCodexCredentials(liveHomePaths: [String]) -> [String] {
+        // Countless unrelated tests configure profile homes reusing the same fixture
+        // `account_id` strings. Without an explicit override, mirroring under tests would let one
+        // test's mirrored account bleed into another's `codexProfileHomePaths` as a spurious extra
+        // home. Skip entirely unless a test opts in with its own isolated mirror root.
+        #if DEBUG
+        guard !Self.isRunningTests || Self.codexCredentialMirrorRootOverrideForTesting != nil else {
+            return []
+        }
+        #else
+        guard !Self.isRunningTests else { return [] }
+        #endif
+        let fileManager = FileManager.default
+        let liveHomes = liveHomePaths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let mirrorRoot = Self.codexCredentialMirrorRoot(fileManager: fileManager)
+        let plan = CodexCredentialMirror.mirrorPlan(
+            liveHomes: liveHomes, mirrorRoot: mirrorRoot, fileManager: fileManager)
+        CodexCredentialMirror.apply(copies: plan.copies, fileManager: fileManager)
+        return plan.extraHomes.map(\.path)
+    }
+
+    private static func codexCredentialMirrorRoot(fileManager: FileManager) -> URL {
+        #if DEBUG
+        if let override = Self.codexCredentialMirrorRootOverrideForTesting {
+            return override
+        }
+        #endif
+        // Under tests, default to a temp dir — never the real Application Support tree.
+        if Self.isRunningTests {
+            return fileManager.temporaryDirectory
+                .appendingPathComponent("CodexBarTests", isDirectory: true)
+                .appendingPathComponent("codex-homes-mirror", isDirectory: true)
+        }
+        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser
+        return base
+            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent("codex-homes", isDirectory: true)
     }
 
     private func loadManagedCodexAccounts() throws -> ManagedCodexAccountSet {

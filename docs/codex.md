@@ -82,6 +82,23 @@ Example:
 }
 ```
 
+### Codex credential retention (live-home mirror)
+- Problem: `codex login` overwrites whichever home's `auth.json` it targets. Logging into a second
+  account in the same home (e.g. `~/.codex-harness`) erases the first account's only token
+  lineage, and CodexBar loses that account entirely.
+- Every time CodexBar reads the discovered and configured Codex home list, it also mirrors each
+  live home's `auth.json` into `~/Library/Application Support/CodexBar/codex-homes/<account_id>/auth.json`
+  (owner-only permissions, atomic write) whenever the live copy is newer than what's mirrored,
+  comparing `last_refresh` first and falling back to file modification time.
+- **Live home wins; a mirror only fills gaps.** A mirror directory is treated as an extra Codex
+  profile home only while no live discovered or configured home currently holds that `account_id`.
+  As soon as a live home holds the account again, CodexBar reads from the live home and the mirror
+  goes back to being a dormant backup.
+- Several live homes can hold the same account (e.g. `.codex`, `.codex-harness`, and a managed home
+  all signed into the same account); CodexBar mirrors from whichever one has the newest login.
+- CodexBar never writes into a live home from this mirror, and it never mirrors an account back
+  across machines — it is a local, per-account backup only.
+
 ### OpenAI web dashboard (optional, off by default)
 - Enable it in Preferences -> Providers -> Codex -> OpenAI web extras.
 - It exists for dashboard-only extras such as code review remaining, usage breakdown, and credits history.

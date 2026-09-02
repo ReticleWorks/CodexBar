@@ -251,6 +251,7 @@ final class SettingsStore {
 
     #if DEBUG
     static var codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting: TimeInterval?
+    static var codexCredentialMirrorRootOverrideForTesting: URL?
     #endif
 
     @ObservationIgnored let userDefaults: UserDefaults
