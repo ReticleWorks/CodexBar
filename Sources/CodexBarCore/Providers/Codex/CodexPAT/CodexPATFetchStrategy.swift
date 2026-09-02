@@ -27,8 +27,13 @@ struct CodexPATFetchStrategy: ProviderFetchStrategy {
             switch fetchError {
             case .unauthorized:
                 return true
-            case .invalidResponse, .serverError, .networkError:
+            case .invalidResponse, .serverError:
                 return false
+            case .networkError:
+                // A one-shot CLI invocation has no repeated-app-server-spawn risk to guard
+                // against (unlike the long-lived app), so let an unreachable network fall
+                // through to the local CLI strategy instead of hanging on a dead connection.
+                return context.runtime == .cli
             }
         }
         if let credentialsError = error as? CodexOAuthCredentialsError {

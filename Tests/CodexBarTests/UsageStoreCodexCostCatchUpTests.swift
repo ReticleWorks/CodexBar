@@ -127,6 +127,16 @@ struct UsageStoreCodexCostCatchUpTests {
         #expect(store.tokenSnapshotPublicationRevision(for: .codex) == 1)
         #expect(store.codexCostCatchUpActivity?.phase == .paused)
         #expect(store.codexCostCatchUpActivity?.pauseReason == .noProgress)
+
+        // A later background refresh cycle rediscovers the exact same unresolvable scope/state.
+        // It must not spend another bounded pass re-confirming what's already known to be stuck.
+        await store.refreshTokenUsage(.codex, force: true)
+        await Self.waitUntil {
+            store.codexCostCatchUpTask == nil && snapshotLoadCount == 2
+        }
+        #expect(advanceCount == 1)
+        #expect(store.codexCostCatchUpActivity?.phase == .paused)
+        #expect(store.codexCostCatchUpActivity?.pauseReason == .noProgress)
     }
 
     @Test

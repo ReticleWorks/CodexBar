@@ -91,7 +91,10 @@ struct CodexOAuthExpiryPipelineTests {
             await Self.pipeline.fetch(context: context, provider: .codex)
         }
         let unauthorized = failure == "401" || failure == "403"
-        let expectsCLI = unauthorized && mode == .auto && !managed
+        // A one-shot CLI invocation (this fixture's context always runs with runtime: .cli) has
+        // no repeated-app-server-spawn risk, so an unreachable network still falls through to
+        // the local CLI strategy in auto mode, same as an unauthorized token does.
+        let expectsCLI = (unauthorized || failure == "network") && mode == .auto && !managed
         guard case let .failure(error) = outcome.result else {
             Issue.record("An expiry hint cannot authenticate a rejected token")
             return

@@ -756,6 +756,16 @@ struct CodexOAuthTests {
         #expect(!strategy.shouldFallback(
             on: CodexTokenRefresher.RefreshError.networkError(URLError(.timedOut)),
             context: context))
+
+        // A one-shot CLI invocation has no repeated-app-server-spawn risk, so it should still
+        // reach the local CLI strategy on a network error instead of surfacing a hung request.
+        let cliContext = self.makeContext(runtime: .cli, sourceMode: .auto)
+        #expect(strategy.shouldFallback(
+            on: CodexOAuthFetchError.networkError(URLError(.notConnectedToInternet)),
+            context: cliContext))
+        #expect(strategy.shouldFallback(
+            on: CodexTokenRefresher.RefreshError.networkError(URLError(.timedOut)),
+            context: cliContext))
     }
 
     @Test

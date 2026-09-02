@@ -359,7 +359,7 @@ struct CodexBaselineCharacterizationTests {
     }
 
     @Test
-    func `CLI auto tries OAuth before missing CLI fallback`() async throws {
+    func `CLI auto tries OAuth then CLI before surfacing an unreachable network`() async throws {
         let oauthHome = try self.makeUnavailableOAuthHome()
         defer { try? FileManager.default.removeItem(at: oauthHome) }
         let settings = ProviderSettingsSnapshot.make(
@@ -378,12 +378,15 @@ struct CodexBaselineCharacterizationTests {
             ],
             settings: settings)
 
-        #expect(outcome.attempts.map(\.strategyID) == ["codex.pat", "codex.oauth"])
-        #expect(outcome.attempts.map(\.wasAvailable) == [false, true])
+        // A one-shot CLI invocation has no repeated-app-server-spawn risk, so an OAuth network
+        // error still falls through to check the local CLI strategy. It's also missing here, so
+        // the pipeline surfaces the original OAuth network error rather than a CLI one.
+        #expect(outcome.attempts.map(\.strategyID) == ["codex.pat", "codex.oauth", "codex.cli"])
+        #expect(outcome.attempts.map(\.wasAvailable) == [false, true, false])
 
         switch outcome.result {
         case .success:
-            Issue.record("Expected unavailable OAuth endpoint to fail before CLI fallback")
+            Issue.record("Expected unavailable OAuth endpoint and missing CLI to fail")
         case let .failure(error as CodexOAuthFetchError):
             if case .networkError = error {
                 break
