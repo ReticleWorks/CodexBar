@@ -1468,6 +1468,8 @@ extension UsageStore {
     {
         guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
         let wasFailingBeforeOutcome = self.errors[.codex] != nil
+        // Deferred so the early returns inside the switch (generation guard, missing snapshot) still log the flip.
+        defer { self.logProviderFetchTransition(provider: .codex, wasFailing: wasFailingBeforeOutcome) }
         switch outcome.result {
         case let .success(result):
             guard let snapshot else { return }
@@ -1537,7 +1539,6 @@ extension UsageStore {
                 self.errors[.codex] = nil
             }
         }
-        self.logProviderFetchTransition(provider: .codex, wasFailing: wasFailingBeforeOutcome)
     }
 
     func applySelectedOutcome(
