@@ -118,14 +118,26 @@ extension StatusItemController {
     }
 
     func scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for providers: [UsageProvider]) {
-        guard Self.codexAccountMenuProjectionRevalidationEnabled else { return }
+        let log = CodexBarLog.logger(LogCategories.providers)
+        guard Self.codexAccountMenuProjectionRevalidationEnabled else {
+            log.warning("codex menu revalidation skipped: disabled")
+            return
+        }
         guard providers.contains(.codex) else { return }
-        guard self.settings.codexAccountMenuProjectionNeedsRevalidation else { return }
-        guard self.codexAccountMenuProjectionRevalidationTask == nil else { return }
+        guard self.settings.codexAccountMenuProjectionNeedsRevalidation else {
+            log.warning("codex menu revalidation skipped: not needed")
+            return
+        }
+        guard self.codexAccountMenuProjectionRevalidationTask == nil else {
+            log.warning("codex menu revalidation skipped: already in flight")
+            return
+        }
+        log.warning("codex menu revalidation scheduled")
 
         self.codexAccountMenuProjectionRevalidationTask = Task { @MainActor [weak self] in
             guard let settings = self?.settings else { return }
             let result = await settings.revalidateCodexAccountMenuProjection()
+            log.warning("codex menu revalidation result=\(String(describing: result))")
             guard let self else { return }
             guard !Task.isCancelled else {
                 self.codexAccountMenuProjectionRevalidationTask = nil
@@ -139,7 +151,13 @@ extension StatusItemController {
                     refreshOpenMenus: !self.openMenus.isEmpty,
                     deferOpenParentMenuRebuild: true,
                     allowStaleContentDuringDataRefresh: true)
-            case .discarded, .skipped, .unchanged:
+            case .discarded:
+                // The active source (or reconciliation generation) changed while this load was in
+                // flight, e.g. an account switch landed during a menu-open revalidation. The
+                // "already in flight" guard above dropped that switch's own request, so the current
+                // source's projection is still stale — retry now that the task handle is clear.
+                self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
+            case .skipped, .unchanged:
                 break
             }
         }

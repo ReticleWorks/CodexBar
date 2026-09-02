@@ -372,7 +372,7 @@ struct CodexAccountMenuDisplaySnapshotTests {
     }
 }
 
-private final class CodexAccountSnapshotLoaderProbe: @unchecked Sendable {
+final class CodexAccountSnapshotLoaderProbe: @unchecked Sendable {
     private let lock = NSLock()
     private let snapshot: CodexAccountReconciliationSnapshot
     private let blocks: Bool

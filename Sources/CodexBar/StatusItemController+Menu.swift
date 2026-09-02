@@ -1090,11 +1090,10 @@ extension StatusItemController {
         let visibleAccountID = account.id
         self.advanceMenuInteraction(for: menu)
         self.settings.selectDisplayedCodexVisibleAccount(account)
-        // selectDisplayedCodexVisibleAccount deliberately does not invalidate the cached menu
-        // projection (see its own comment), so the row switcher would otherwise keep rendering
-        // against the OLD active source's cached projection until the next unrelated menu-open
-        // event happened to trigger a revalidation — showing the refresh complete with no data.
-        // Schedule the same revalidation the menu-open path already uses.
+        // codexActiveSource's setter already clears the cached menu projection, but nothing forces
+        // an async recompute afterward. Without this call the switcher would keep rendering nil
+        // (no cached projection for the new source) until the next unrelated menu-open event
+        // happened to trigger one — showing the refresh complete with no data.
         self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
         if self.store.prepareCodexAccountScopedRefreshIfNeeded(), let menu {
             self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
