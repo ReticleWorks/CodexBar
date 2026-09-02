@@ -5,7 +5,6 @@ import Testing
 @testable import CodexBar
 
 @MainActor
-@Suite(.serialized)
 final class StatusMenuTokenAccountSwitcherTests {
     private func disableMenuCardsForTesting() {
         StatusItemController.menuCardRenderingEnabled = false
