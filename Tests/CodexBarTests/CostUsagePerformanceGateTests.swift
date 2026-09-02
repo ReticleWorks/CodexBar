@@ -22,8 +22,9 @@ struct CostUsagePerformanceGateTests {
     func `time limited codex catch-up bounds oversized active day discovery`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
-        CostUsageScanner.resetCodexDirectoryCursorsForTesting()
-        defer { CostUsageScanner.resetCodexDirectoryCursorsForTesting() }
+        let cursorRoots = [env.codexSessionsRoot, env.codexArchivedSessionsRoot]
+        CostUsageScanner.resetCodexDirectoryCursorsForTesting(underRoots: cursorRoots)
+        defer { CostUsageScanner.resetCodexDirectoryCursorsForTesting(underRoots: cursorRoots) }
         let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
         let corpusSize = 1500
         let candidateLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
@@ -63,7 +64,7 @@ struct CostUsagePerformanceGateTests {
         #expect(firstCache.files.count == candidateLimit)
         #expect(firstCache.codexScanCatchUpPending == true)
 
-        CostUsageScanner.resetCodexDirectoryCursorsForTesting()
+        CostUsageScanner.resetCodexDirectoryCursorsForTesting(underRoots: cursorRoots)
         let relaunchedRecorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = relaunchedRecorder
         _ = CostUsageScanner.loadDailyReport(

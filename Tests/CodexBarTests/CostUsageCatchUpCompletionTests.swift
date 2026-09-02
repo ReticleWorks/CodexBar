@@ -212,7 +212,9 @@ struct CostUsageCatchUpCompletionTests {
             pendingFilePaths: waitingPaths,
             legacyRecursivePendingRootPaths: [])))
         let counter = IdentityValidationCounter()
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { counter.increment() }
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = (
+            databaseURL: store.databaseURL,
+            visit: { counter.increment() })
         defer { CostUsageStore.codexCatchUpReconciliationVisitForTesting = nil }
         let restored = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
 

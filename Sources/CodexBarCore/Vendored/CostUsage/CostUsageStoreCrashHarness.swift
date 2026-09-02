@@ -68,14 +68,14 @@ package enum CostUsageStoreCrashHarness {
     }
 
     private static func save(_ cache: CostUsageCache, cacheRoot: URL, killAfterFiles: Int?) -> Bool {
+        let store = CostUsageStore(cacheRoot: cacheRoot)
         if let killAfterFiles {
-            CostUsageStore.saveCycleCheckpointForTesting = { persistedFiles in
+            CostUsageStore.saveCycleCheckpointForTesting = (databaseURL: store.databaseURL, checkpoint: { persistedFiles in
                 if persistedFiles >= killAfterFiles {
                     kill(getpid(), SIGKILL)
                 }
-            }
+            })
         }
-        let store = CostUsageStore(cacheRoot: cacheRoot)
         _ = store.syncSaveCodexCache(
             cache,
             calendar: self.fixtureCalendar,

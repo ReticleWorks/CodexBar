@@ -52,7 +52,10 @@ extension CostUsageStore {
         guard snapshot.metadata.timeZoneIdentifier == nil
             || snapshot.metadata.timeZoneIdentifier == calendar.timeZone.identifier
         else { return CostUsageCache() }
-        return Self.cache(from: snapshot, recorder: self.scopedReadWorkRecorderForTesting)
+        return Self.cache(
+            from: snapshot,
+            recorder: self.scopedReadWorkRecorderForTesting,
+            databaseURL: self.databaseURL)
     }
 
     func loadCodexReadView(calendar: Calendar, purpose: CostUsageStoreReadPurpose) -> CostUsageStoreReadView {
@@ -85,7 +88,7 @@ extension CostUsageStore {
             // Identity/anchor reconciliation touches the filesystem; do not pin a SQLite reader during it.
             recorder?.recordReadViewConversion(database: database)
             return CostUsageStoreReadView(cache: Self.cache(
-                from: snapshot, recorder: recorder, retryPresence: retryPresence))
+                from: snapshot, recorder: recorder, retryPresence: retryPresence, databaseURL: self.databaseURL))
         }
     }
 
@@ -100,7 +103,7 @@ extension CostUsageStore {
         skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         var cache = cache
-        Self.reconcileCompletedCodexCatchUp(cache: &cache)
+        Self.reconcileCompletedCodexCatchUp(cache: &cache, databaseURL: self.databaseURL)
         let previous = self.readSnapshot()
         let budgetProtectionWindow = Self.budgetProtectionWindow(
             cache: cache,
@@ -110,7 +113,8 @@ extension CostUsageStore {
                previous: previous,
                cache: cache,
                calendar: calendar,
-               recorder: self.scopedReadWorkRecorderForTesting)
+               recorder: self.scopedReadWorkRecorderForTesting,
+               databaseURL: self.databaseURL)
         {
             // Retention owns the safety boundary: even a semantically unchanged scanner result
             // must honor newly tightened row/file budgets before it can return.
@@ -140,7 +144,8 @@ extension CostUsageStore {
                 previous: lockedPrevious,
                 cache: cache,
                 calendar: calendar,
-                recorder: self.scopedReadWorkRecorderForTesting)
+                recorder: self.scopedReadWorkRecorderForTesting,
+                databaseURL: self.databaseURL)
             else {
                 _ = self.rollbackSaveTransaction()
                 var retry = result
@@ -196,7 +201,9 @@ extension CostUsageStore {
                     canReuseRows: canReuseStoredRows),
                 calendar: calendar)
             persistedFiles += 1
-            Self.saveCycleCheckpointForTesting?(persistedFiles)
+            if let checkpoint = Self.saveCycleCheckpointForTesting, checkpoint.databaseURL == self.databaseURL {
+                checkpoint.checkpoint(persistedFiles)
+            }
         }
         _ = self.replaceDayAggregates(Self.globalAggregates(cache: cache))
         _ = self.setMetadata(Self.metadata(cache: cache, calendar: calendar))
@@ -238,9 +245,10 @@ extension CostUsageStore {
         previous: CostUsageStoreSnapshot,
         cache: CostUsageCache,
         calendar: Calendar,
-        recorder: CostUsageStoreReadWorkRecorder?) -> Bool
+        recorder: CostUsageStoreReadWorkRecorder?,
+        databaseURL: URL) -> Bool
     {
-        var restored = Self.cache(from: previous, recorder: recorder)
+        var restored = Self.cache(from: previous, recorder: recorder, databaseURL: databaseURL)
         guard restored.timeZoneIdentifier == nil
             || restored.timeZoneIdentifier == calendar.timeZone.identifier
         else { return false }
@@ -374,7 +382,8 @@ extension CostUsageStore {
     private static func cache(
         from snapshot: CostUsageStoreSnapshot,
         recorder: CostUsageStoreReadWorkRecorder?,
-        retryPresence: [String: CostUsageCodexRetryBufferPresence]? = nil) -> CostUsageCache
+        retryPresence: [String: CostUsageCodexRetryBufferPresence]? = nil,
+        databaseURL: URL) -> CostUsageCache
     {
         recorder?.recordCacheConversion()
         var cache = CostUsageCache()
@@ -438,7 +447,9 @@ extension CostUsageStore {
             let identityNeedsValidation = normalizedIdentity != file.scanState.fileIdentity
             let restoredScanState: RestoredCodexScanState
             if identityNeedsValidation, remainingIdentityValidationVisits > 0 {
-                Self.codexCatchUpReconciliationVisitForTesting?()
+                if let visit = Self.codexCatchUpReconciliationVisitForTesting, visit.databaseURL == databaseURL {
+                    visit.visit()
+                }
                 remainingIdentityValidationVisits -= 1
                 restoredScanState = Self.restoredCodexScanState(
                     file: file,
@@ -522,6 +533,7 @@ extension CostUsageStore {
             cache: &cache)
         Self.reconcileCompletedCodexCatchUp(
             cache: &cache,
+            databaseURL: databaseURL,
             visitLimit: remainingIdentityValidationVisits)
         cache.days = Self.days(from: snapshot.dayAggregates)
         return cache
@@ -642,6 +654,7 @@ extension CostUsageStore {
 
     private static func reconcileCompletedCodexCatchUp(
         cache: inout CostUsageCache,
+        databaseURL: URL,
         visitLimit: Int = CostUsageScanner.codexCatchUpScanCandidateLimit)
     {
         if var lookback = cache.codexActiveLookbackState {
@@ -651,7 +664,9 @@ extension CostUsageStore {
             let candidatePaths = lookback.pendingFilePaths.prefix(reconciliationLimit)
             var completedIdentityValidationPathKeys: Set<String> = []
             for path in candidatePaths {
-                Self.codexCatchUpReconciliationVisitForTesting?()
+                if let visit = Self.codexCatchUpReconciliationVisitForTesting, visit.databaseURL == databaseURL {
+                    visit.visit()
+                }
                 let fileURL = URL(fileURLWithPath: path)
                 let metadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
                 guard let fileId = metadata.fileId,

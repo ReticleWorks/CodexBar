@@ -148,8 +148,11 @@ struct CostUsageBoundedProgressTests {
         try Self.writeSyntheticCorpus(env: env, day: day, fileCount: corpusSize)
 
         var options = Self.boundedOptions(env: env)
+        let databaseURL = CostUsageStore(cacheRoot: env.cacheRoot).databaseURL
         let saveCounter = BoundedProgressCounter()
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { saveCounter.increment() }
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = (
+            databaseURL: databaseURL,
+            visit: { saveCounter.increment() })
         let firstRecorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = firstRecorder
         _ = CostUsageScanner.loadDailyReport(
@@ -161,7 +164,9 @@ struct CostUsageBoundedProgressTests {
         let firstMetrics = firstRecorder.snapshot()
 
         let loadCounter = BoundedProgressCounter()
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { loadCounter.increment() }
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = (
+            databaseURL: databaseURL,
+            visit: { loadCounter.increment() })
         let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         CostUsageStore.codexCatchUpReconciliationVisitForTesting = nil
         #expect(saveCounter.value == 0)
