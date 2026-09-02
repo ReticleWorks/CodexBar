@@ -1467,6 +1467,7 @@ extension UsageStore {
         generation: UInt64? = nil) async
     {
         guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
+        let wasFailingBeforeOutcome = self.errors[.codex] != nil
         switch outcome.result {
         case let .success(result):
             guard let snapshot else { return }
@@ -1536,6 +1537,7 @@ extension UsageStore {
                 self.errors[.codex] = nil
             }
         }
+        self.logProviderFetchTransition(provider: .codex, wasFailing: wasFailingBeforeOutcome)
     }
 
     func applySelectedOutcome(
