@@ -1,7 +1,8 @@
 import AppKit
 import CodexBarCore
+import Foundation
 import SwiftUI
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// Developer tool, skipped by default: renders the accent color settings row and the recolored
@@ -13,16 +14,17 @@ import XCTest
 /// Run with:
 ///   CODEXBAR_ACCENT_SCREENSHOT_DIR=~/Downloads swift test --filter ProviderAccentColorScreenshotRenderTests
 @MainActor
-final class ProviderAccentColorScreenshotRenderTests: XCTestCase {
+final class ProviderAccentColorScreenshotRenderTests {
     private static let rowWidth: CGFloat = 460
     private static let barWidth: CGFloat = 320
 
     /// A deliberately unmistakable override, so a reviewer can tell at a glance that it took effect.
     private static let overrideHex = "#A56CC1"
 
+    @Test
     func test_renderAccentColorSettingsScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_ACCENT_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_ACCENT_SCREENSHOT_DIR to render accent color screenshots.")
+            return
         }
         let directory = URL(
             fileURLWithPath: NSString(string: dir).expandingTildeInPath,
@@ -40,7 +42,7 @@ final class ProviderAccentColorScreenshotRenderTests: XCTestCase {
         ]
 
         for (name, view) in renders {
-            let data = try XCTUnwrap(Self.pngData(for: view), "render failed for \(name)")
+            let data = try #require(Self.pngData(for: view), "render failed for \(name)")
             let url = directory.appendingPathComponent("\(name).png")
             try data.write(to: url, options: .atomic)
             print("Wrote \(url.path)")

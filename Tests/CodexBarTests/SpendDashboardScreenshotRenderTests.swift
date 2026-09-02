@@ -1,7 +1,8 @@
 import AppKit
 import CodexBarCore
+import Foundation
 import SwiftUI
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// Developer tool, skipped by default: renders the Usage & Spend currency section for PR proof.
@@ -9,10 +10,11 @@ import XCTest
 /// Run with:
 ///   CODEXBAR_SPEND_PROOF_DIR=.github/pr-proof swift test --filter SpendDashboardScreenshotRenderTests
 @MainActor
-final class SpendDashboardScreenshotRenderTests: XCTestCase {
+final class SpendDashboardScreenshotRenderTests {
+    @Test
     func test_renderUsageSpendRangeScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_SPEND_PROOF_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_SPEND_PROOF_DIR to render Usage & Spend proof screenshots.")
+            return
         }
         let directory = URL(
             fileURLWithPath: NSString(string: dir).expandingTildeInPath,
@@ -20,7 +22,7 @@ final class SpendDashboardScreenshotRenderTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let calendar = Self.gmtCalendar
-        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 17, hour: 12)))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 17, hour: 12)))
         let recentDay = "2026-08-17"
         let oldDay = "2026-07-12"
         let claude = SpendDashboardModel.ProviderInput(
@@ -53,10 +55,10 @@ final class SpendDashboardScreenshotRenderTests: XCTestCase {
             requestedDays: SpendDashboardSource.scanDays,
             now: now,
             calendar: calendar)
-        let thirtyGroup = try XCTUnwrap(thirty.groups.first)
-        let allGroup = try XCTUnwrap(allTime.groups.first)
-        XCTAssertFalse(thirtyGroup.models.contains { $0.modelName == "MiniMax-M3" })
-        XCTAssertTrue(allGroup.models.contains { $0.modelName == "MiniMax-M3" })
+        let thirtyGroup = try #require(thirty.groups.first)
+        let allGroup = try #require(allTime.groups.first)
+        #expect(!(thirtyGroup.models.contains { $0.modelName == "MiniMax-M3" }))
+        #expect(allGroup.models.contains { $0.modelName == "MiniMax-M3" })
 
         let hourlyHours = [9, 10, 11, 14, 16].map { hour -> (Date, Double) in
             let date = calendar.date(from: DateComponents(year: 2026, month: 8, day: 17, hour: hour)) ?? now
@@ -115,11 +117,11 @@ final class SpendDashboardScreenshotRenderTests: XCTestCase {
             now: now,
             calendar: calendar,
             selectedDay: selectedDay)
-        let hourlyGroup = try XCTUnwrap(hourly.groups.first)
-        let selectedGroup = try XCTUnwrap(selected.groups.first)
-        XCTAssertFalse(hourlyGroup.hourlyPoints.isEmpty)
-        XCTAssertEqual(Set(hourlyGroup.hourlyPoints.map(\.sourceID)), [SpendDashboardModel.openCodexSourceID])
-        XCTAssertEqual(selectedGroup.hourlyChartDomain?.lowerBound, selectedDay)
+        let hourlyGroup = try #require(hourly.groups.first)
+        let selectedGroup = try #require(selected.groups.first)
+        #expect(!(hourlyGroup.hourlyPoints.isEmpty))
+        #expect(Set(hourlyGroup.hourlyPoints.map(\.sourceID)) == [SpendDashboardModel.openCodexSourceID])
+        #expect(selectedGroup.hourlyChartDomain?.lowerBound == selectedDay)
 
         let renders: [(String, AnyView)] = [
             ("usage-spend-30d", AnyView(Self.chrome(selectedDays: 30, group: thirtyGroup))),
@@ -138,14 +140,14 @@ final class SpendDashboardScreenshotRenderTests: XCTestCase {
                         .background(Color(nsColor: .windowBackgroundColor)))),
         ]
         for (name, view) in renders {
-            let data = try XCTUnwrap(Self.pngData(for: view), "render failed for \(name)")
+            let data = try #require(Self.pngData(for: view), "render failed for \(name)")
             let url = directory.appendingPathComponent("\(name).png")
             try data.write(to: url, options: .atomic)
             print("Wrote \(url.path)")
         }
 
         if let sharePayload = ShareStatsBuilder.make(model: allTime) {
-            let shareData = try XCTUnwrap(ShareStatsRenderer.pngData(for: sharePayload))
+            let shareData = try #require(ShareStatsRenderer.pngData(for: sharePayload))
             try shareData.write(
                 to: directory.appendingPathComponent("share-stats-all-partial.png"),
                 options: .atomic)

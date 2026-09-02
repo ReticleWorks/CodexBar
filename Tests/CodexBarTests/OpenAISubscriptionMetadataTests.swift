@@ -1,43 +1,49 @@
+import Foundation
+import Testing
 import WebKit
-import XCTest
 @testable import CodexBarCore
 
 #if os(macOS)
-final class OpenAISubscriptionMetadataTests: XCTestCase {
+final class OpenAISubscriptionMetadataTests {
+    @Test
     func test_mapsRenewingSubscriptionToRenewalDate() throws {
-        let metadata = try XCTUnwrap(OpenAISubscriptionMetadata.parse(
+        let metadata = try #require(OpenAISubscriptionMetadata.parse(
             activeUntil: "2026-08-20T14:30:07Z",
             willRenew: true))
 
-        XCTAssertNil(metadata.expiresAt)
-        XCTAssertEqual(metadata.renewsAt, ISO8601DateFormatter().date(from: "2026-08-20T14:30:07Z"))
+        #expect(metadata.expiresAt == nil)
+        #expect(metadata.renewsAt == ISO8601DateFormatter().date(from: "2026-08-20T14:30:07Z"))
     }
 
+    @Test
     func test_mapsNonRenewingSubscriptionToExpirationDate() throws {
-        let metadata = try XCTUnwrap(OpenAISubscriptionMetadata.parse(
+        let metadata = try #require(OpenAISubscriptionMetadata.parse(
             activeUntil: "2026-08-20T14:30:07Z",
             willRenew: false))
 
-        XCTAssertEqual(metadata.expiresAt, ISO8601DateFormatter().date(from: "2026-08-20T14:30:07Z"))
-        XCTAssertNil(metadata.renewsAt)
+        #expect(metadata.expiresAt == ISO8601DateFormatter().date(from: "2026-08-20T14:30:07Z"))
+        #expect(metadata.renewsAt == nil)
     }
 
+    @Test
     func test_parsesFractionalISO8601Date() throws {
         let raw = "2026-08-20T14:30:07.123Z"
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let metadata = try XCTUnwrap(OpenAISubscriptionMetadata.parse(activeUntil: raw, willRenew: true))
+        let metadata = try #require(OpenAISubscriptionMetadata.parse(activeUntil: raw, willRenew: true))
 
-        XCTAssertEqual(metadata.renewsAt, formatter.date(from: raw))
+        #expect(metadata.renewsAt == formatter.date(from: raw))
     }
 
+    @Test
     func test_rejectsMissingOrMalformedMetadata() {
-        XCTAssertNil(OpenAISubscriptionMetadata.parse(activeUntil: nil, willRenew: true))
-        XCTAssertNil(OpenAISubscriptionMetadata.parse(activeUntil: "not a date", willRenew: true))
-        XCTAssertNil(OpenAISubscriptionMetadata.parse(activeUntil: "2026-08-20T14:30:07Z", willRenew: nil))
+        #expect(OpenAISubscriptionMetadata.parse(activeUntil: nil, willRenew: true) == nil)
+        #expect(OpenAISubscriptionMetadata.parse(activeUntil: "not a date", willRenew: true) == nil)
+        #expect(OpenAISubscriptionMetadata.parse(activeUntil: "2026-08-20T14:30:07Z", willRenew: nil) == nil)
     }
 
     @MainActor
+    @Test
     func test_resetInvalidatesStaleInFlightCaptureAndScopesEndpointToSameOrigin() async throws {
         if Self.shouldSkipWebKitOnCI() { return }
 
@@ -52,19 +58,19 @@ final class OpenAISubscriptionMetadataTests: XCTestCase {
         _ = try await webView.evaluateJavaScript(openAISubscriptionResetScript)
         try await Task.sleep(for: .milliseconds(150))
         let staleMetadata = try await Self.readMetadata(from: webView)
-        XCTAssertNil(staleMetadata)
+        #expect(staleMetadata == nil)
 
         _ = try await webView.evaluateJavaScript("window.fetch('https://example.com/backend-api/subscriptions'); true")
         try await Task.sleep(for: .milliseconds(150))
         let crossOriginMetadata = try await Self.readMetadata(from: webView)
-        XCTAssertNil(crossOriginMetadata)
+        #expect(crossOriginMetadata == nil)
 
         _ = try await webView.evaluateJavaScript("window.fetch('/backend-api/subscriptions'); true")
         try await Self.waitUntil(webView) { try await Self.readMetadata(from: $0) != nil }
         let capturedMetadata = try await Self.readMetadata(from: webView)
-        let metadata = try XCTUnwrap(capturedMetadata)
-        XCTAssertEqual(metadata["activeUntil"] as? String, "2026-08-20T14:30:07.123Z")
-        XCTAssertEqual(metadata["willRenew"] as? Bool, true)
+        let metadata = try #require(capturedMetadata)
+        #expect(metadata["activeUntil"] as? String == "2026-08-20T14:30:07.123Z")
+        #expect(metadata["willRenew"] as? Bool == true)
     }
 
     @MainActor
@@ -83,7 +89,7 @@ final class OpenAISubscriptionMetadataTests: XCTestCase {
             if try await condition(webView) { return }
             try await Task.sleep(for: .milliseconds(25))
         }
-        XCTFail("Timed out waiting for WebKit fixture")
+        Issue.record("Timed out waiting for WebKit fixture")
     }
 
     private static func shouldSkipWebKitOnCI() -> Bool {
