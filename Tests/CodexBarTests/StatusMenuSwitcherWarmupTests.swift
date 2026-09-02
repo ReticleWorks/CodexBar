@@ -1,13 +1,13 @@
 import AppKit
 import CodexBarCore
 import Foundation
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// The merged menu pre-builds sibling switcher tabs after opening so a tab
 /// switch attaches cached, pre-laid-out rows (flicker fix follow-up).
 @MainActor
-final class StatusMenuSwitcherWarmupTests: XCTestCase {
+final class StatusMenuSwitcherWarmupTests {
     private func makeController() -> (controller: StatusItemController, menu: NSMenu) {
         StatusItemController.menuCardRenderingEnabled = false
         StatusItemController.setMenuRefreshEnabledForTesting(false)
@@ -41,11 +41,13 @@ final class StatusMenuSwitcherWarmupTests: XCTestCase {
         return (controller, menu)
     }
 
+    @Test
     func test_warmupCachesSiblingSelections() {
         let (controller, menu) = self.makeController()
         defer { controller.releaseStatusItemsForTesting() }
         guard menu.items.first?.view is ProviderSwitcherView else {
-            return XCTFail("expected merged menu with provider switcher")
+            Issue.record("expected merged menu with provider switcher")
+            return
         }
 
         controller.warmMergedSwitcherSiblingContent(in: menu)
@@ -56,12 +58,13 @@ final class StatusMenuSwitcherWarmupTests: XCTestCase {
         let siblingProviders = enabledProviders.filter { cachedSelections.contains(.provider($0)) }
         // Every non-visible provider tab gets a cache entry; the visible tab is
         // cached separately by the populate path.
-        XCTAssertGreaterThanOrEqual(siblingProviders.count, enabledProviders.count - 1)
+        #expect(siblingProviders.count >= enabledProviders.count - 1)
         for (_, entry) in caches {
-            XCTAssertFalse(entry.items.isEmpty)
+            #expect(!(entry.items.isEmpty))
         }
     }
 
+    @Test
     func test_warmupDoesNotAddFlexibleProviderPadding() {
         let (controller, menu) = self.makeController()
         defer { controller.releaseStatusItemsForTesting() }
@@ -70,14 +73,15 @@ final class StatusMenuSwitcherWarmupTests: XCTestCase {
 
         let caches = controller.mergedSwitcherContentCaches[ObjectIdentifier(menu)] ?? [:]
         let providerEntries = caches.filter { $0.key != .overview }
-        XCTAssertFalse(providerEntries.isEmpty)
+        #expect(!(providerEntries.isEmpty))
         for (_, entry) in providerEntries {
-            XCTAssertFalse(entry.items.contains { item in
+            #expect(!(entry.items.contains { item in
                 item.title.isEmpty && item.view?.frame.height == 0
-            }, "provider tabs must size to their content instead of carrying a flexible blank row")
+            }), "provider tabs must size to their content instead of carrying a flexible blank row")
         }
     }
 
+    @Test
     func test_warmupSkipsSelectionsAlreadyCached() {
         let (controller, menu) = self.makeController()
         defer { controller.releaseStatusItemsForTesting() }
@@ -91,9 +95,9 @@ final class StatusMenuSwitcherWarmupTests: XCTestCase {
             .mapValues { $0.items }
 
         // Re-warming with unchanged inputs must reuse the cached items, not rebuild them.
-        XCTAssertEqual(firstItems?.count, secondItems?.count)
+        #expect(firstItems?.count == secondItems?.count)
         for (selection, items) in firstItems ?? [:] {
-            XCTAssertTrue(secondItems?[selection]?.elementsEqual(items, by: ===) == true)
+            #expect(secondItems?[selection]?.elementsEqual(items, by: ===) == true)
         }
     }
 }

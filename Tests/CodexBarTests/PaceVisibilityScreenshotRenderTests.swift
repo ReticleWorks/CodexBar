@@ -1,7 +1,8 @@
 import AppKit
 import CodexBarCore
+import Foundation
 import SwiftUI
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// Developer tool, skipped by default: renders a provider card with the pace
@@ -10,13 +11,14 @@ import XCTest
 /// Run with:
 ///   CODEXBAR_PACE_SCREENSHOT_DIR=~/Downloads swift test --filter PaceVisibilityScreenshotRenderTests
 @MainActor
-final class PaceVisibilityScreenshotRenderTests: XCTestCase {
+final class PaceVisibilityScreenshotRenderTests {
     private static let width: CGFloat = 320
     private static let now = Date(timeIntervalSince1970: 1_782_000_000)
 
+    @Test
     func test_renderPaceVisibilityScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_PACE_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_PACE_SCREENSHOT_DIR to render pace visibility screenshots.")
+            return
         }
         let expanded = NSString(string: dir).expandingTildeInPath
         let directory = URL(fileURLWithPath: expanded, isDirectory: true)
@@ -27,7 +29,7 @@ final class PaceVisibilityScreenshotRenderTests: XCTestCase {
             let view = AnyView(UsageMenuCardView(model: model, width: Self.width)
                 .padding(12)
                 .background(Color(nsColor: .windowBackgroundColor)))
-            let data = try XCTUnwrap(Self.pngData(for: view), "render failed for \(name)")
+            let data = try #require(Self.pngData(for: view), "render failed for \(name)")
             let url = directory.appendingPathComponent("codexbar-\(name).png")
             try data.write(to: url, options: .atomic)
             print("Wrote \(url.path)")

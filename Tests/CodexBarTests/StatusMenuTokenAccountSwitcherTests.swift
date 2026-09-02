@@ -1,11 +1,11 @@
 import AppKit
 import CodexBarCore
 import Foundation
-import XCTest
+import Testing
 @testable import CodexBar
 
 @MainActor
-final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
+final class StatusMenuTokenAccountSwitcherTests {
     private func disableMenuCardsForTesting() {
         StatusItemController.menuCardRenderingEnabled = false
         StatusItemController.setMenuRefreshEnabledForTesting(false)
@@ -109,6 +109,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 loginMethod: "OAuth"))
     }
 
+    @Test
     func test_tokenAccountMenuSelectionRefreshesProviderWhileGlobalRefreshIsActive() async throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -137,29 +138,30 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             await store.refresh()
         }
         await blocker.waitUntilStarted(count: 1)
-        XCTAssertTrue(store.isRefreshing)
+        #expect(store.isRefreshing)
 
         let menu = controller.makeMenu()
         defer { withExtendedLifetime(menu) {} }
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        let switcher = try #require(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
-        XCTAssertEqual(settings.tokenAccountsData(for: .claude)?.clampedActiveIndex(), 1)
+        let selectionTask = try #require(switcher._test_select(index: 1))
+        #expect(settings.tokenAccountsData(for: .claude)?.clampedActiveIndex() == 1)
         for _ in 0..<40 {
             await Task.yield()
         }
         let startedBeforeDrain = await blocker.startedCallCount()
-        XCTAssertEqual(startedBeforeDrain, 1)
+        #expect(startedBeforeDrain == 1)
 
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
         await blocker.waitUntilStarted(count: 2)
         await selectionTask.value
         await refreshTask.value
         let startedCallCount = await blocker.startedCallCount()
-        XCTAssertGreaterThanOrEqual(startedCallCount, 2)
+        #expect(startedCallCount >= 2)
     }
 
+    @Test
     func test_multiAccountSegmentedLayoutShowsCopilotSwitcher() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -185,10 +187,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
-        _ = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
-        XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard"])
+        _ = try #require(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        #expect(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") } == ["menuCard"])
     }
 
+    @Test
     func test_multiAccountStackedLayoutShowsCopilotCards() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -223,10 +226,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
-        XCTAssertNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
-        XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard-0", "menuCard-1"])
+        #expect(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first == nil)
+        #expect(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") } == ["menuCard-0", "menuCard-1"])
     }
 
+    @Test
     func test_multiAccountStackedRefreshStartsAccountFetchesConcurrently() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -249,13 +253,14 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         await blocker.waitUntilStarted(count: 2)
         let startedBeforeResume = await blocker.startedCallCount()
-        XCTAssertEqual(startedBeforeResume, 2)
+        #expect(startedBeforeResume == 2)
 
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
         await refreshTask.value
-        XCTAssertEqual(store.accountSnapshots[.claude]?.count, 2)
+        #expect(store.accountSnapshots[.claude]?.count == 2)
     }
 
+    @Test
     func test_multiAccountStackedLayoutIgnoresStaleSnapshotsAndKeepsMenuCapped() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -309,20 +314,19 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
-        XCTAssertNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        #expect(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first == nil)
         // Stale snapshots stay ignored and the 6-account cap still applies before the
         // compact plan: capped accounts 0-4 plus the selected account 7. With 8 accounts
         // the compact layout pins the active card, keeps the best candidate row visible,
         // and folds the remaining healthy accounts.
-        XCTAssertEqual(
-            self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") || $0.hasPrefix("tokenAccount") },
-            [
+        #expect(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") || $0.hasPrefix("tokenAccount") } == [
                 "tokenAccountCard-\(accounts[7].id.uuidString)",
                 "tokenAccountCompact-\(accounts[0].id.uuidString)",
                 "tokenAccountCollapsed",
             ])
     }
 
+    @Test
     func test_multiAccountStackedLayoutRejectsSnapshotsAfterCredentialOrBaseURLChanges() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -356,22 +360,21 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             statusBar: testStatusBar())
         defer { controller.releaseStatusItemsForTesting() }
 
-        XCTAssertEqual(try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.count, 2)
+        #expect(try #require(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.count == 2)
 
         settings.updateTokenAccount(
             provider: .sub2api,
             accountID: originalAccounts[0].id,
             token: "rotated-p1")
-        XCTAssertEqual(
-            try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.map(\.account.id),
-            [originalAccounts[1].id])
+        #expect(try #require(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.map(\.account.id) == [originalAccounts[1].id])
 
         settings.updateProviderConfig(provider: .sub2api) { config in
             config.enterpriseHost = "https://second.example.test"
         }
-        XCTAssertTrue(try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.isEmpty)
+        #expect(try #require(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.isEmpty)
     }
 
+    @Test
     func test_multiAccountStackedCancellationCannotRestoreCredentialStaleSnapshots() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -409,9 +412,10 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         await blocker.resumeAll(with: .failure(CancellationError()))
         await refreshTask.value
 
-        XCTAssertEqual(store.accountSnapshots[.claude]?.map(\.account.id), [originalAccounts[1].id])
+        #expect(store.accountSnapshots[.claude]?.map(\.account.id) == [originalAccounts[1].id])
     }
 
+    @Test
     func test_validTokenAccountSnapshotsHandlesDuplicateAccountIDsWithoutTrapping() {
         let settings = self.makeSettings()
         self.enableOnlyClaude(settings)
@@ -441,9 +445,10 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: first)),
         ]
 
-        XCTAssertTrue(store.validTokenAccountSnapshots(provider: .claude, accounts: [first, duplicate]).isEmpty)
+        #expect(store.validTokenAccountSnapshots(provider: .claude, accounts: [first, duplicate]).isEmpty)
     }
 
+    @Test
     func test_duplicateAccountIDsRejectCrossCredentialPublication() async {
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -482,10 +487,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         await store.refreshProvider(.claude)
 
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertNil(store.accountSnapshots[.claude])
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.accountSnapshots[.claude] == nil)
     }
 
+    @Test
     func test_authorizedTokenRotationPublishesAndCachesUnderTheRotatedCredential() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -505,11 +511,9 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         await store.refreshProvider(.antigravity)
         let accountsAfterPrimaryRefresh = settings.tokenAccounts(for: .antigravity)
-        XCTAssertEqual(accountsAfterPrimaryRefresh[0].token, "n1")
-        XCTAssertEqual(store.snapshot(for: .antigravity)?.primary?.usedPercent, 37)
-        XCTAssertEqual(
-            store.accountSnapshots[.antigravity]?.first?.cacheKey,
-            store.tokenAccountSnapshotCacheKey(provider: .antigravity, account: accountsAfterPrimaryRefresh[0]))
+        #expect(accountsAfterPrimaryRefresh[0].token == "n1")
+        #expect(store.snapshot(for: .antigravity)?.primary?.usedPercent == 37)
+        #expect(store.accountSnapshots[.antigravity]?.first?.cacheKey == store.tokenAccountSnapshotCacheKey(provider: .antigravity, account: accountsAfterPrimaryRefresh[0]))
 
         settings.setActiveTokenAccountIndex(1, for: .antigravity)
         await store.refreshProvider(.antigravity)
@@ -518,10 +522,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             provider: .antigravity,
             accountID: accountsAfterPrimaryRefresh[0].id)
 
-        XCTAssertEqual(store.snapshot(for: .antigravity)?.primary?.usedPercent, 37)
-        XCTAssertEqual(store.accountSnapshots[.antigravity]?.count, 2)
+        #expect(store.snapshot(for: .antigravity)?.primary?.usedPercent == 37)
+        #expect(store.accountSnapshots[.antigravity]?.count == 2)
     }
 
+    @Test
     func test_tokenAccountSwitchDefersOpenMenuRebuildUntilAfterSwitcherAction() async throws {
         self.disableMenuCardsForTesting()
         StatusItemController.setMenuRefreshEnabledForTesting(true)
@@ -560,7 +565,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         let menu = controller.makeMenu()
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        let switcher = try #require(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
 
         var rebuildCount = 0
         controller._test_openMenuRebuildObserver = { _ in
@@ -568,13 +573,13 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         }
         defer { controller._test_openMenuRebuildObserver = nil }
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
+        let selectionTask = try #require(switcher._test_select(index: 1))
 
-        XCTAssertEqual(rebuildCount, 0)
+        #expect(rebuildCount == 0)
         for _ in 0..<20 where rebuildCount == 0 {
             await Task.yield()
         }
-        XCTAssertEqual(rebuildCount, 1)
+        #expect(rebuildCount == 1)
 
         await blocker.waitUntilStarted(count: 1)
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
@@ -582,9 +587,10 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         for _ in 0..<20 where rebuildCount < 2 {
             await Task.yield()
         }
-        XCTAssertEqual(rebuildCount, 2)
+        #expect(rebuildCount == 2)
     }
 
+    @Test
     func test_tokenAccountSwitchUsesSelectedAccountCacheWhileRefreshIsInFlight() async throws {
         self.disableMenuCardsForTesting()
         StatusItemController.setMenuRefreshEnabledForTesting(true)
@@ -634,20 +640,21 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         let menu = controller.makeMenu(for: .claude)
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        let switcher = try #require(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
+        let selectionTask = try #require(switcher._test_select(index: 1))
 
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 72)
-        XCTAssertEqual(store.lastKnownResetSnapshots[.claude]?.primary?.usedPercent, 72)
-        XCTAssertNil(store.errors[.claude])
-        XCTAssertEqual(store.sourceLabel(for: .claude), "secondary-cache")
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 72)
+        #expect(store.lastKnownResetSnapshots[.claude]?.primary?.usedPercent == 72)
+        #expect(store.errors[.claude] == nil)
+        #expect(store.sourceLabel(for: .claude) == "secondary-cache")
 
         await blocker.waitUntilStarted(count: 1)
         await blocker.resumeAll(with: .success(self.snapshot(percent: 45)))
         await selectionTask.value
     }
 
+    @Test
     func test_tokenAccountSwitchClearsPreviousAccountIdentityUntilSelectedRefreshCompletes() async throws {
         self.disableMenuCardsForTesting()
 
@@ -689,30 +696,29 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         let menu = controller.makeMenu(for: .claude)
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        let switcher = try #require(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
+        let selectionTask = try #require(switcher._test_select(index: 1))
 
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertNil(store.snapshot(for: .claude)?.identity(for: .claude))
-        let pausedModel = try XCTUnwrap(controller.menuCardModel(for: .claude))
-        XCTAssertTrue(pausedModel.email.isEmpty)
-        XCTAssertTrue(pausedModel.metrics.isEmpty)
-        XCTAssertNil(store.lastKnownResetSnapshots[.claude])
-        XCTAssertNil(store.errors[.claude])
-        XCTAssertNil(store.lastSourceLabels[.claude])
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.snapshot(for: .claude)?.identity(for: .claude) == nil)
+        let pausedModel = try #require(controller.menuCardModel(for: .claude))
+        #expect(pausedModel.email.isEmpty)
+        #expect(pausedModel.metrics.isEmpty)
+        #expect(store.lastKnownResetSnapshots[.claude] == nil)
+        #expect(store.errors[.claude] == nil)
+        #expect(store.lastSourceLabels[.claude] == nil)
 
         await blocker.waitUntilStarted(count: 1)
         await blocker.resumeAll(with: .success(self.snapshot(percent: 45)))
         await selectionTask.value
 
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
-        XCTAssertEqual(
-            store.accountSnapshots[.claude]?.first(where: { $0.account.id == accounts[1].id })?
-                .snapshot?.primary?.usedPercent,
-            45)
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 45)
+        #expect(store.accountSnapshots[.claude]?.first(where: { $0.account.id == accounts[1].id })?
+                .snapshot?.primary?.usedPercent == 45)
     }
 
+    @Test
     func test_segmentedRefreshPreservesValidAccountCacheAndInvalidatesCredentialChanges() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -743,35 +749,36 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         await store.refreshProvider(.claude)
         let originalAccounts = settings.tokenAccounts(for: .claude)
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 11)
-        XCTAssertEqual(store.accountSnapshots[.claude]?.count, 1)
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 11)
+        #expect(store.accountSnapshots[.claude]?.count == 1)
 
         settings.setActiveTokenAccountIndex(1, for: .claude)
         store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[1].id)
-        XCTAssertNil(store.snapshot(for: .claude))
+        #expect(store.snapshot(for: .claude) == nil)
         await store.refreshProvider(.claude)
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 72)
-        XCTAssertEqual(store.accountSnapshots[.claude]?.count, 2)
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 72)
+        #expect(store.accountSnapshots[.claude]?.count == 2)
 
         settings.setActiveTokenAccountIndex(0, for: .claude)
         store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[0].id)
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 11)
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 11)
 
         settings.updateTokenAccount(
             provider: .claude,
             accountID: originalAccounts[0].id,
             token: "rotated-p1")
         store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[0].id)
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertEqual(store.accountSnapshots[.claude]?.map(\.account.id), [originalAccounts[1].id])
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.accountSnapshots[.claude]?.map(\.account.id) == [originalAccounts[1].id])
 
         settings.removeTokenAccount(provider: .claude, accountID: originalAccounts[1].id)
         store.pruneTokenAccountSnapshots(provider: .claude, accounts: settings.tokenAccounts(for: .claude))
-        XCTAssertNil(store.accountSnapshots[.claude])
+        #expect(store.accountSnapshots[.claude] == nil)
     }
 }
 
 extension StatusMenuTokenAccountSwitcherTests {
+    @Test
     func test_segmentedRefreshClearsLiveSnapshotWhenCredentialChangesAndReplacementFails() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -780,7 +787,7 @@ extension StatusMenuTokenAccountSwitcherTests {
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
         settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        let account = try? XCTUnwrap(settings.selectedTokenAccount(for: .claude))
+        let account = try? #require(settings.selectedTokenAccount(for: .claude))
 
         let store = UsageStore(
             fetcher: UsageFetcher(),
@@ -798,8 +805,8 @@ extension StatusMenuTokenAccountSwitcherTests {
                 attempts: [])
         }
         await store.refreshProvider(.claude)
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
-        XCTAssertEqual(store.sourceLabel(for: .claude), "fixture")
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 45)
+        #expect(store.sourceLabel(for: .claude) == "fixture")
 
         if let account {
             settings.updateTokenAccount(provider: .claude, accountID: account.id, token: "rotated-p1")
@@ -809,12 +816,13 @@ extension StatusMenuTokenAccountSwitcherTests {
         }
         await store.refreshProvider(.claude)
 
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertNil(store.lastSourceLabels[.claude])
-        XCTAssertNil(store.lastKnownResetSnapshots[.claude])
-        XCTAssertNil(store.accountSnapshots[.claude])
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.lastSourceLabels[.claude] == nil)
+        #expect(store.lastKnownResetSnapshots[.claude] == nil)
+        #expect(store.accountSnapshots[.claude] == nil)
     }
 
+    @Test
     func test_segmentedRefreshClearsLiveSnapshotWhenBaseURLChangesAndReplacementFails() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -843,7 +851,7 @@ extension StatusMenuTokenAccountSwitcherTests {
                 attempts: [])
         }
         await store.refreshProvider(.sub2api)
-        XCTAssertEqual(store.snapshot(for: .sub2api)?.primary?.usedPercent, 45)
+        #expect(store.snapshot(for: .sub2api)?.primary?.usedPercent == 45)
 
         settings.updateProviderConfig(provider: .sub2api) { config in
             config.enterpriseHost = "https://second.example.test"
@@ -853,12 +861,13 @@ extension StatusMenuTokenAccountSwitcherTests {
         }
         await store.refreshProvider(.sub2api)
 
-        XCTAssertNil(store.snapshot(for: .sub2api))
-        XCTAssertNil(store.lastSourceLabels[.sub2api])
-        XCTAssertNil(store.lastKnownResetSnapshots[.sub2api])
-        XCTAssertNil(store.accountSnapshots[.sub2api])
+        #expect(store.snapshot(for: .sub2api) == nil)
+        #expect(store.lastSourceLabels[.sub2api] == nil)
+        #expect(store.lastKnownResetSnapshots[.sub2api] == nil)
+        #expect(store.accountSnapshots[.sub2api] == nil)
     }
 
+    @Test
     func test_segmentedRefreshClearsLiveSnapshotWhenLastAccountIsRemovedAndFallbackFails() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -885,7 +894,7 @@ extension StatusMenuTokenAccountSwitcherTests {
                 attempts: [])
         }
         await store.refreshProvider(.claude)
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 45)
 
         if let accountID {
             settings.removeTokenAccount(provider: .claude, accountID: accountID)
@@ -895,12 +904,13 @@ extension StatusMenuTokenAccountSwitcherTests {
         }
         await store.refreshProvider(.claude)
 
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertNil(store.lastSourceLabels[.claude])
-        XCTAssertNil(store.lastKnownResetSnapshots[.claude])
-        XCTAssertNil(store.accountSnapshots[.claude])
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.lastSourceLabels[.claude] == nil)
+        #expect(store.lastKnownResetSnapshots[.claude] == nil)
+        #expect(store.accountSnapshots[.claude] == nil)
     }
 
+    @Test
     func test_segmentedRefreshClearsTokenAccountErrorWhenFailedAccountIsRemovedAndFallbackCancels() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -919,8 +929,8 @@ extension StatusMenuTokenAccountSwitcherTests {
             ProviderFetchOutcome(result: .failure(StatusMenuTokenAccountTestError.rejected), attempts: [])
         }
         await store.refreshProvider(.claude)
-        XCTAssertNotNil(store.userFacingError(for: .claude))
-        XCTAssertTrue(store.tokenAccountLiveStateProviders.contains(.claude))
+        #expect(store.userFacingError(for: .claude) != nil)
+        #expect(store.tokenAccountLiveStateProviders.contains(.claude))
 
         if let accountID {
             settings.removeTokenAccount(provider: .claude, accountID: accountID)
@@ -930,12 +940,13 @@ extension StatusMenuTokenAccountSwitcherTests {
         }
         await store.refreshProvider(.claude)
 
-        XCTAssertNil(store.snapshot(for: .claude))
-        XCTAssertNil(store.userFacingError(for: .claude))
-        XCTAssertNil(store.knownLimitsAvailabilityByProvider[.claude])
-        XCTAssertFalse(store.tokenAccountLiveStateProviders.contains(.claude))
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.userFacingError(for: .claude) == nil)
+        #expect(store.knownLimitsAvailabilityByProvider[.claude] == nil)
+        #expect(!(store.tokenAccountLiveStateProviders.contains(.claude)))
     }
 
+    @Test
     func test_segmentedRefreshPreservesAmbientSnapshotWithoutTokenAccountOwnership() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -955,8 +966,8 @@ extension StatusMenuTokenAccountSwitcherTests {
 
         await store.refreshProvider(.claude)
 
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
-        XCTAssertFalse(store.tokenAccountLiveStateProviders.contains(.claude))
+        #expect(store.snapshot(for: .claude)?.primary?.usedPercent == 45)
+        #expect(!(store.tokenAccountLiveStateProviders.contains(.claude)))
     }
 }
 

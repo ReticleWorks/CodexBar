@@ -1,6 +1,7 @@
 import AppKit
+import Foundation
 import SwiftUI
-import XCTest
+import Testing
 @testable import CodexBar
 @testable import CodexBarCore
 
@@ -10,13 +11,14 @@ import XCTest
 /// Run with:
 ///   CODEXBAR_SCREENSHOT_DIR=docs/screenshots swift test --filter MenuLayoutScreenshotRenderTests
 @MainActor
-final class MenuLayoutScreenshotRenderTests: XCTestCase {
+final class MenuLayoutScreenshotRenderTests {
     private static let width: CGFloat = 320
     private static let now = Date(timeIntervalSince1970: 1_782_000_000)
 
+    @Test
     func test_renderCursorOverviewCoverageProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_CURSOR_OVERVIEW_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_CURSOR_OVERVIEW_SCREENSHOT_DIR to render the Cursor Overview proof.")
+            return
         }
         // This override changes assertions only; the fixture and production renderer are identical.
         let expectedDays = ProcessInfo.processInfo.environment["CODEXBAR_CURSOR_OVERVIEW_EXPECTED_DAYS"] ?? "30"
@@ -24,14 +26,14 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try CodexBarLocalizationOverride.$appLanguage.withValue("en") {
             let fixture = try CursorOverviewProofFixture.make()
-            XCTAssertEqual(fixture.model.groups.count, 1)
-            XCTAssertEqual(fixture.model.groups.first?.coveredDayCount, 30)
-            XCTAssertEqual(fixture.model.groups.first?.totalCost, 12)
-            XCTAssertEqual(fixture.model.groups.first?.totalTokens, 1000)
-            XCTAssertEqual(fixture.counts.total, 2)
-            XCTAssertEqual(fixture.counts.cost, 1)
-            XCTAssertEqual(fixture.counts.tokens, 1)
-            XCTAssertTrue(fixture.summary.isPartial)
+            #expect(fixture.model.groups.count == 1)
+            #expect(fixture.model.groups.first?.coveredDayCount == 30)
+            #expect(fixture.model.groups.first?.totalCost == 12)
+            #expect(fixture.model.groups.first?.totalTokens == 1000)
+            #expect(fixture.counts.total == 2)
+            #expect(fixture.counts.cost == 1)
+            #expect(fixture.counts.tokens == 1)
+            #expect(fixture.summary.isPartial)
             try CursorOverviewProofFixture.eventJSON.write(
                 to: directory.appendingPathComponent("input.json"), atomically: true, encoding: .utf8)
             for dark in [false, true] {
@@ -44,9 +46,9 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                 let hosting = NSHostingView(rootView: view)
                 hosting.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                 let name = "cursor-overview-\(dark ? "dark" : "light")"
-                let png = try XCTUnwrap(Self.pngData(hosting: hosting))
-                XCTAssertEqual(hosting.frame.width, 310)
-                XCTAssertFalse(png.isEmpty)
+                let png = try #require(Self.pngData(hosting: hosting))
+                #expect(hosting.frame.width == 310)
+                #expect(!(png.isEmpty))
                 try png.write(to: directory.appendingPathComponent("\(name).png"))
                 let accessibility = Self.accessibilityText(hosting)
                 try accessibility.write(
@@ -57,15 +59,16 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                     "Coverage: \(expectedDays) / 30", "~$12.00", "1 of 2 subscriptions have spend", "~1K tokens",
                     "Priced 1 · Unpriced 0 · Unmetered 0 · Estimated 0", "List-price equivalent",
                 ] {
-                    XCTAssertTrue(accessibility.contains(text), accessibility)
+                    #expect(accessibility.contains(text), Comment(rawValue: accessibility))
                 }
             }
         }
     }
 
+    @Test
     func test_renderOpenRouterLimitClarityProof() async throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_OPENROUTER_CLARITY_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_OPENROUTER_CLARITY_SCREENSHOT_DIR to render the OpenRouter proof.")
+            return
         }
         let snapshot = try await OpenRouterLimitTestSupport.snapshot()
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
@@ -93,8 +96,8 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                             hosting.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                             let name = "openrouter-\(language)-\(dark ? "dark" : "light")"
                                 + "-\(sectioned ? "sectioned" : "card")-\(showUsed ? "used" : "remaining")"
-                            let png = try XCTUnwrap(Self.pngData(hosting: hosting))
-                            XCTAssertEqual(hosting.frame.width, 310)
+                            let png = try #require(Self.pngData(hosting: hosting))
+                            #expect(hosting.frame.width == 310)
                             try png.write(to: directory.appendingPathComponent("\(name).png"))
                             // Inspect hosted accessibility children independently of pixels and model text.
                             let accessibility = Self.accessibilityText(hosting)
@@ -102,12 +105,12 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                                 to: directory.appendingPathComponent("\(name)-accessibility.txt"),
                                 atomically: true,
                                 encoding: .utf8)
-                            XCTAssertTrue(accessibility.contains("$1.90"), accessibility)
-                            XCTAssertTrue(accessibility.contains("$30.00"), accessibility)
-                            XCTAssertTrue(accessibility.contains(L("API key limit")), accessibility)
-                            XCTAssertTrue(accessibility.contains(L(showUsed ? "Usage used" : "Usage remaining")))
-                            XCTAssertTrue(accessibility.contains(L("%d percent", showUsed ? 0 : 100)))
-                            XCTAssertTrue(accessibility.contains(L("Spending cap, not balance")), accessibility)
+                            #expect(accessibility.contains("$1.90"), Comment(rawValue: accessibility))
+                            #expect(accessibility.contains("$30.00"), Comment(rawValue: accessibility))
+                            #expect(accessibility.contains(L("API key limit")), Comment(rawValue: accessibility))
+                            #expect(accessibility.contains(L(showUsed ? "Usage used" : "Usage remaining")))
+                            #expect(accessibility.contains(L("%d percent", showUsed ? 0 : 100)))
+                            #expect(accessibility.contains(L("Spending cap, not balance")), Comment(rawValue: accessibility))
                         }
                     }
                 }
@@ -139,13 +142,14 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
         return element.perform(selector)?.takeUnretainedValue()
     }
 
+    @Test
     func test_renderLayoutOverrideDisclosureProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_LAYOUT_OVERRIDE_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_LAYOUT_OVERRIDE_SCREENSHOT_DIR to render the layout override proof.")
+            return
         }
-        XCTAssertTrue(SettingsStore.isRunningTests)
+        #expect(SettingsStore.isRunningTests)
         guard SettingsStore.isRunningTests else { return }
-        XCTAssertTrue(CodexCredentialFileAccess.isTestContext)
+        #expect(CodexCredentialFileAccess.isTestContext)
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("layout-override-proof-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -186,10 +190,10 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                         startupBehavior: .testing,
                         environmentBase: [:],
                         widgetSnapshotURL: root.appendingPathComponent("widget.json"))
-                    XCTAssertEqual(store.enabledFirstPartyProvidersForDisplay(), order)
-                    XCTAssertTrue(store.snapshots.isEmpty)
-                    XCTAssertEqual(settings.menuBarLayoutForGlobalEditing(representativeProvider: .claude), global)
-                    XCTAssertEqual(settings.menuBarLayout(for: .claude), override)
+                    #expect(store.enabledFirstPartyProvidersForDisplay() == order)
+                    #expect(store.snapshots.isEmpty)
+                    #expect(settings.menuBarLayoutForGlobalEditing(representativeProvider: .claude) == global)
+                    #expect(settings.menuBarLayout(for: .claude) == override)
 
                     let view = AnyView(MenuBarLayoutEditor(settings: settings, store: store)
                         .frame(width: 560)
@@ -197,23 +201,24 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                         .environment(\.locale, Locale(identifier: "en_US_POSIX"))
                         .environment(\.colorScheme, .dark)
                         .background(Color(nsColor: .windowBackgroundColor)))
-                    let data = try XCTUnwrap(Self.pngData(for: view))
+                    let data = try #require(Self.pngData(for: view))
                     let directory = URL(fileURLWithPath: dir, isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     try data.write(to: directory.appendingPathComponent("layout-override.png"))
-                    XCTAssertEqual(settings.menuBarLayoutOverrides, [.claude: override])
-                    XCTAssertEqual(settings.menuBarLayout, global)
+                    #expect(settings.menuBarLayoutOverrides == [.claude: override])
+                    #expect(settings.menuBarLayout == global)
                 }
             }
         }
     }
 
+    @Test
     func test_renderClaudeExtraUsageFillProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_CLAUDE_EXTRA_USAGE_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_CLAUDE_EXTRA_USAGE_SCREENSHOT_DIR to render the Claude Extra Usage proof.")
+            return
         }
 
-        let metadata = try XCTUnwrap(ProviderDefaults.metadata[.claude])
+        let metadata = try #require(ProviderDefaults.metadata[.claude])
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
             secondary: nil,
@@ -258,16 +263,17 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                 .environment(\.colorScheme, .dark)
                 .background(Color(nsColor: .windowBackgroundColor)))
             let mode = showUsed ? "used" : "remaining"
-            let png = try XCTUnwrap(Self.pngData(for: view), "Claude Extra Usage \(mode) render failed")
+            let png = try #require(Self.pngData(for: view), "Claude Extra Usage \(mode) render failed")
             let url = directory.appendingPathComponent("claude-extra-usage-\(mode).png")
             try png.write(to: url, options: .atomic)
             print("Wrote \(url.path)")
         }
     }
 
+    @Test
     func test_renderAntigravitySemanticLayoutProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_ANTIGRAVITY_LAYOUT_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_ANTIGRAVITY_LAYOUT_SCREENSHOT_DIR to render the Antigravity layout proof.")
+            return
         }
 
         let json = antigravityQuotaSummaryJSON(
@@ -329,16 +335,17 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
 
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let png = try XCTUnwrap(Self.pngData(for: view), "Antigravity layout proof render failed")
+        let png = try #require(Self.pngData(for: view), "Antigravity layout proof render failed")
         let url = directory.appendingPathComponent("antigravity-semantic-layout.png")
         try png.write(to: url, options: .atomic)
         print("Rendered: \(rendered.attributedTitle.string); accessibility: \(rendered.accessibilityLabel)")
         print("Wrote \(url.path)")
     }
 
+    @Test
     func test_renderMultiAccountLayoutScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_SCREENSHOT_DIR to render menu layout screenshots.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -350,16 +357,17 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
             ("claude-multi-account-stacked-before", before),
             ("claude-multi-account-compact-after", after),
         ] {
-            let data = try XCTUnwrap(Self.pngData(for: view), "render failed for \(name)")
+            let data = try #require(Self.pngData(for: view), "render failed for \(name)")
             let url = directory.appendingPathComponent("\(name).png")
             try data.write(to: url, options: .atomic)
             print("Wrote \(url.path)")
         }
     }
 
+    @Test
     func test_renderCachedCostRefreshScreenshots() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_COST_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_COST_SCREENSHOT_DIR to render cached cost screenshots.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -378,16 +386,17 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
                 bottomPadding: 12,
                 width: Self.width))
             let suffix = isRefreshing ? "refreshing" : "idle"
-            let data = try XCTUnwrap(Self.pngData(for: view), "render failed for cached cost \(suffix)")
+            let data = try #require(Self.pngData(for: view), "render failed for cached cost \(suffix)")
             let url = directory.appendingPathComponent("usage-spend-cached-menu-\(suffix).png")
             try data.write(to: url, options: .atomic)
             print("Wrote \(url.path)")
         }
     }
 
+    @Test
     func test_renderDeepSeekMenuBarLayoutProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_DEEPSEEK_LAYOUT_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_DEEPSEEK_LAYOUT_SCREENSHOT_DIR to render the DeepSeek layout proof.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -461,15 +470,16 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
         .frame(width: 390)
         .background(Color(nsColor: .windowBackgroundColor)))
 
-        let data = try XCTUnwrap(Self.pngData(for: view), "DeepSeek layout proof render failed")
+        let data = try #require(Self.pngData(for: view), "DeepSeek layout proof render failed")
         let url = directory.appendingPathComponent("deepseek-custom-layout-preview-status-proof.png")
         try data.write(to: url, options: .atomic)
         print("Wrote \(url.path)")
     }
 
+    @Test
     func test_renderEarlyWeeklyPaceTokenProof() throws {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_PACE_SCREENSHOT_DIR"] else {
-            throw XCTSkip("Set CODEXBAR_PACE_SCREENSHOT_DIR to render the early-window pace token proof.")
+            return
         }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -556,7 +566,7 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
         .frame(width: 430)
         .background(Color(nsColor: .windowBackgroundColor)))
 
-        let data = try XCTUnwrap(Self.pngData(for: view), "early-window pace proof render failed")
+        let data = try #require(Self.pngData(for: view), "early-window pace proof render failed")
         let url = directory.appendingPathComponent("early-weekly-pace-token-proof.png")
         try data.write(to: url, options: .atomic)
         print("Wrote \(url.path)")

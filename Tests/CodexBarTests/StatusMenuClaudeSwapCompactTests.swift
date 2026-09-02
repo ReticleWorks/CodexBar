@@ -1,14 +1,14 @@
 import AppKit
 import CodexBarCore
 import Foundation
-import XCTest
+import Testing
 @testable import CodexBar
 
 /// Menu-structure coverage for the compact claude-swap layout: with four or more
 /// accounts the active account keeps its card, inactive accounts become compact
 /// rows, the healthy tail collapses, and expansion state restores full cards.
 @MainActor
-final class StatusMenuClaudeSwapCompactTests: XCTestCase {
+final class StatusMenuClaudeSwapCompactTests {
     private func makeController(
         accounts: [ProviderAccountUsageSnapshot]) -> (controller: StatusItemController, store: UsageStore)
     {
@@ -89,6 +89,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         menu.items.compactMap { $0.representedObject as? String }
     }
 
+    @Test
     func test_manyAccountsRenderCompactLayoutRows() {
         let (controller, _) = self.makeController(accounts: self.sixAccounts())
         defer { controller.releaseStatusItemsForTesting() }
@@ -99,7 +100,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         let ids = self.representedIDs(in: menu).filter {
             $0.hasPrefix("claudeSwap") || $0.hasPrefix("menuCard")
         }
-        XCTAssertEqual(ids, [
+        #expect(ids == [
             "claudeSwapCard-1",
             "claudeSwapCompact-5",
             "claudeSwapCompact-3",
@@ -107,6 +108,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         ])
     }
 
+    @Test
     func test_expandedAccountRendersFullCard() {
         let accounts = self.sixAccounts()
         let (controller, _) = self.makeController(accounts: accounts)
@@ -117,7 +119,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         controller.menuWillOpen(menu)
 
         let ids = self.representedIDs(in: menu).filter { $0.hasPrefix("claudeSwap") }
-        XCTAssertEqual(ids, [
+        #expect(ids == [
             "claudeSwapCard-1",
             "claudeSwapCard-5",
             "claudeSwapCompact-3",
@@ -125,6 +127,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         ])
     }
 
+    @Test
     func test_expandedHealthyTailShowsAllCompactRows() {
         let (controller, _) = self.makeController(accounts: self.sixAccounts())
         defer { controller.releaseStatusItemsForTesting() }
@@ -134,7 +137,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         controller.menuWillOpen(menu)
 
         let ids = self.representedIDs(in: menu).filter { $0.hasPrefix("claudeSwap") }
-        XCTAssertEqual(ids, [
+        #expect(ids == [
             "claudeSwapCard-1",
             "claudeSwapCompact-5",
             "claudeSwapCompact-4",
@@ -144,6 +147,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         ])
     }
 
+    @Test
     func test_fewAccountsKeepStackedCards() {
         let (controller, _) = self.makeController(accounts: Array(self.sixAccounts().prefix(3)))
         defer { controller.releaseStatusItemsForTesting() }
@@ -154,9 +158,10 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         let ids = self.representedIDs(in: menu).filter {
             $0.hasPrefix("claudeSwap") || $0.hasPrefix("menuCard")
         }
-        XCTAssertEqual(ids, ["menuCard-0", "menuCard-1", "menuCard-2"])
+        #expect(ids == ["menuCard-0", "menuCard-1", "menuCard-2"])
     }
 
+    @Test
     func test_menuCloseResetsExpansionState() {
         let accounts = self.sixAccounts()
         let (controller, _) = self.makeController(accounts: accounts)
@@ -168,7 +173,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         controller.menuWillOpen(menu)
         controller.menuDidClose(menu)
 
-        XCTAssertTrue(controller.compactAccountExpandedIDs.isEmpty)
-        XCTAssertTrue(controller.compactAccountExpandedHealthyTailProviders.isEmpty)
+        #expect(controller.compactAccountExpandedIDs.isEmpty)
+        #expect(controller.compactAccountExpandedHealthyTailProviders.isEmpty)
     }
 }
