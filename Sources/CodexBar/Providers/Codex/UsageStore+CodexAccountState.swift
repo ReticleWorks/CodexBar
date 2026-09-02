@@ -255,6 +255,28 @@ extension UsageStore {
         return self.currentCodexOpenAIWebRefreshGuard()
     }
 
+    /// A dropped Codex usage result publishes no snapshot and no error, so the row silently renders
+    /// "Not fetched yet" after a refresh that looked successful. Record why the guard rejected it.
+    func logCodexUsageResultDropped(
+        expectedGuard: CodexAccountScopedRefreshGuard,
+        usage: UsageSnapshot)
+    {
+        let currentGuard = self.freshCodexAccountScopedRefreshGuard()
+        CodexBarLog.logger(LogCategories.providers).warning(
+            """
+            codex usage result dropped: \
+            expectedSource=\(String(describing: expectedGuard.source)) \
+            currentSource=\(String(describing: currentGuard.source)) \
+            expectedIdentity=\(String(describing: expectedGuard.identity)) \
+            currentIdentity=\(String(describing: currentGuard.identity)) \
+            expectedAccountKey=\(expectedGuard.accountKey ?? "nil") \
+            currentAccountKey=\(currentGuard.accountKey ?? "nil") \
+            expectedFingerprint=\(expectedGuard.authFingerprint ?? "nil") \
+            currentFingerprint=\(currentGuard.authFingerprint ?? "nil") \
+            resultEmail=\(usage.accountEmail(for: .codex) ?? "nil")
+            """)
+    }
+
     func shouldApplyCodexUsageResult(
         expectedGuard: CodexAccountScopedRefreshGuard,
         usage: UsageSnapshot) -> Bool

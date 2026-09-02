@@ -217,6 +217,12 @@ extension UsageStore {
             activeVisibleAccountID: projection.activeVisibleAccountID)
         guard accounts.count > 1 else {
             if refreshInput.authority.isComplete {
+                CodexBarLog.logger(LogCategories.providers).warning(
+                    """
+                    codex account rows cleared: a complete discovery pass saw \
+                    \(accounts.count) visible account(s), dropping \
+                    \(self.codexAccountSnapshots.count) cached row(s)
+                    """)
                 self.codexAccountSnapshots = []
             }
             return
