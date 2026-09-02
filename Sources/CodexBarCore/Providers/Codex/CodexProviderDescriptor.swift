@@ -462,13 +462,18 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         // Auto mode may launch the CLI as the next strategy. Keep that fallback
         // limited to OAuth states the CLI can actually repair, otherwise
         // transient API or decode failures can spawn `codex app-server`
-        // repeatedly instead of surfacing the original OAuth failure.
+        // repeatedly instead of surfacing the original OAuth failure. A one-shot
+        // CLI invocation has no repeated-spawn risk to guard against (unlike the
+        // long-lived app), so an unreachable network there should still fall
+        // through to the local CLI strategy instead of surfacing a hung network error.
         if let fetchError = error as? CodexOAuthFetchError {
             switch fetchError {
             case .unauthorized:
                 return true
-            case .invalidResponse, .serverError, .networkError:
+            case .invalidResponse, .serverError:
                 return false
+            case .networkError:
+                return context.runtime == .cli
             }
         }
         if let credentialsError = error as? CodexOAuthCredentialsError {
@@ -482,7 +487,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         switch error as? CodexTokenRefresher.RefreshError {
         case .expired, .revoked, .reused:
             return true
-        case .networkError, .invalidResponse, .none:
+        case .networkError:
+            return context.runtime == .cli
+        case .invalidResponse, .none:
             return false
         }
     }
