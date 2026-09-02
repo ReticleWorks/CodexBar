@@ -9,6 +9,7 @@ import Darwin
 import Glibc
 #endif
 
+@Suite(.serialized)
 final class ProviderVersionDetectorTests {
     @Test
     func test_run_returnsFirstLineForSuccessfulCommand() {
