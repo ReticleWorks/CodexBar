@@ -647,6 +647,7 @@ extension UsageStore {
         outcome: ProviderFetchOutcome,
         context: ProviderRefreshOutcomeContext) async
     {
+        let wasFailing = self.errors[provider.instanceID] != nil
         switch outcome.result {
         case let .success(result):
             await self.applyProviderRefreshSuccess(
@@ -660,6 +661,17 @@ extension UsageStore {
                 error: error,
                 attempts: outcome.attempts,
                 context: context)
+        }
+        // Not verbose-gated, so a fetch outcome flip is visible in Console without turning on
+        // verbose logging (D3) — provider id and error description only, never token/key values.
+        let isFailing = self.errors[provider.instanceID] != nil
+        if wasFailing != isFailing {
+            self.providerLogger.info(
+                isFailing ? "Provider fetch started failing" : "Provider fetch recovered",
+                metadata: [
+                    "provider": provider.rawValue,
+                    "error": isFailing ? (self.errors[provider.instanceID] ?? "") : "",
+                ])
         }
     }
 
