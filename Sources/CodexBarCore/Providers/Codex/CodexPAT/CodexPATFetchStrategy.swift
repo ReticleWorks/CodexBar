@@ -11,14 +11,16 @@ struct CodexPATFetchStrategy: ProviderFetchStrategy {
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let credentialEnv = Self.credentialEnvironment(context.env)
         let credentials = try CodexOAuthCredentialsStore.loadPAT(env: credentialEnv)
-        let fetched = try await CodexPATUsageFetcher.fetchUsage(
-            credentials: credentials,
-            cliVersion: Self.resolvedCLIVersion(context: context),
-            env: credentialEnv)
-        return try Self.makeResult(
-            usageResponse: fetched.usage,
-            whoami: fetched.whoami,
-            updatedAt: Date())
+        return try await CodexCLIFetchWatchdog.run(runtime: context.runtime) {
+            let fetched = try await CodexPATUsageFetcher.fetchUsage(
+                credentials: credentials,
+                cliVersion: Self.resolvedCLIVersion(context: context),
+                env: credentialEnv)
+            return try Self.makeResult(
+                usageResponse: fetched.usage,
+                whoami: fetched.whoami,
+                updatedAt: Date())
+        }
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {

@@ -875,4 +875,22 @@ struct CodexOAuthTests {
         let url = CodexOAuthUsageFetcher._resolveUsageURLForTesting(configContents: config)
         #expect(url.absoluteString == "https://chat.openai.com/backend-api/wham/usage")
     }
+
+    @Test
+    func `CLI fetch watchdog bounds a stalled operation and lets the app runtime run unbounded`() async throws {
+        await #expect(throws: CodexOAuthFetchError.self) {
+            _ = try await CodexCLIFetchWatchdog.run(runtime: .cli, grace: .milliseconds(20)) {
+                try await Task.sleep(for: .seconds(60))
+                return 1
+            }
+        }
+
+        // The long-lived app has its own repeated-spawn safeguards elsewhere, so the watchdog
+        // only bounds the one-shot CLI runtime; a slow app-runtime operation still completes.
+        let value = try await CodexCLIFetchWatchdog.run(runtime: .app, grace: .milliseconds(20)) {
+            try await Task.sleep(for: .milliseconds(50))
+            return 1
+        }
+        #expect(value == 1)
+    }
 }
