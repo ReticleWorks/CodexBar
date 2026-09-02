@@ -240,7 +240,13 @@ final class SettingsStore {
         if env["SWIFT_TESTING"] != nil {
             return true
         }
-        return NSClassFromString("XCTestCase") != nil
+        if NSClassFromString("XCTestCase") != nil {
+            return true
+        }
+        // Command Line Tools only (no Xcode XCTest.framework loaded): the process name is the
+        // only remaining signal. `swift test` links this suite as a "*PackageTests" executable.
+        let processName = ProcessInfo.processInfo.processName
+        return processName == "swiftpm-testing-helper" || processName.hasSuffix("PackageTests")
     }()
 
     #if DEBUG

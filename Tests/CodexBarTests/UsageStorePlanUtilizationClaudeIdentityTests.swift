@@ -526,8 +526,12 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         let oauthAccountKey = try #require(
             UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
                 historyOwnerIdentifier: oauthOwner))
+        // Recent (not the historical fixed epoch this test used to use) so the account-level
+        // 30-day staleness prune (PlanUtilizationHistoryStore.pruningStaleAccounts) doesn't drop
+        // this bucket out from under `makeReloadedStoreWithConfiguredTokenAccount`'s real save.
+        let recentEpoch = Date().timeIntervalSince1970.rounded() - 200_000
         let oauthHistory = planSeries(name: .session, windowMinutes: 300, entries: [
-            planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 45),
+            planEntry(at: Date(timeIntervalSince1970: recentEpoch), usedPercent: 45),
         ])
         let store = self.makeReloadedStoreWithConfiguredTokenAccount(
             buckets: PlanUtilizationHistoryBuckets(
@@ -653,19 +657,23 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         let accountBKey = try #require(UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
             historyOwnerIdentifier: accountBOwner))
 
+        // Recent (not the historical fixed epoch this test used to use) so the account-level
+        // 30-day staleness prune (PlanUtilizationHistoryStore.pruningStaleAccounts) doesn't drop
+        // these buckets out from under `makeReloadedStoreWithConfiguredTokenAccount`'s real save.
+        let recentEpoch = Date().timeIntervalSince1970.rounded() - 200_000
         await UsageStore.withActiveClaudeAccountUuidForTesting(nil) {
             await store.recordPlanUtilizationHistorySample(
                 provider: .claude,
                 snapshot: self.identitylessClaudeSnapshot(usedPercent: 10),
                 claudeOAuthHistoryOwnerIdentifier: accountAOwner,
                 isClaudeOAuthSample: true,
-                now: Date(timeIntervalSince1970: 1_700_000_000))
+                now: Date(timeIntervalSince1970: recentEpoch))
             await store.recordPlanUtilizationHistorySample(
                 provider: .claude,
                 snapshot: self.identitylessClaudeSnapshot(usedPercent: 75),
                 claudeOAuthHistoryOwnerIdentifier: accountBOwner,
                 isClaudeOAuthSample: true,
-                now: Date(timeIntervalSince1970: 1_700_007_200))
+                now: Date(timeIntervalSince1970: recentEpoch + 7200))
         }
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
@@ -696,20 +704,24 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             historyOwnerIdentifier: replacementOwner,
             persistentRefHash: "same-row-ref"))
 
+        // Recent (not the historical fixed epoch this test used to use) so the account-level
+        // 30-day staleness prune (PlanUtilizationHistoryStore.pruningStaleAccounts) doesn't drop
+        // these buckets out from under `makeReloadedStoreWithConfiguredTokenAccount`'s real save.
+        let recentEpoch = Date().timeIntervalSince1970.rounded() - 200_000
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 25),
             claudeOAuthPersistentRefHash: "same-row-ref",
             claudeOAuthHistoryOwnerIdentifier: originalOwner,
             isClaudeOAuthSample: true,
-            now: Date(timeIntervalSince1970: 1_700_000_000))
+            now: Date(timeIntervalSince1970: recentEpoch))
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 80),
             claudeOAuthPersistentRefHash: "same-row-ref",
             claudeOAuthHistoryOwnerIdentifier: replacementOwner,
             isClaudeOAuthSample: true,
-            now: Date(timeIntervalSince1970: 1_700_007_200))
+            now: Date(timeIntervalSince1970: recentEpoch + 7200))
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
         #expect(originalKey != replacementKey)
