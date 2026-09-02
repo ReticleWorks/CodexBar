@@ -249,7 +249,7 @@ struct PlanUtilizationHistoryStore: Sendable {
                 let fileURL = self.providerFileURL(for: instanceID)
                 let buckets = providers[instanceID] ?? PlanUtilizationHistoryBuckets()
                 let unscoped = Self.sortedHistories(buckets.unscoped)
-                let accounts = Self.sortedAccounts(buckets.accounts)
+                let accounts = Self.sortedAccounts(Self.pruningStaleAccounts(buckets.accounts))
                 guard !unscoped.isEmpty || !accounts.isEmpty || !buckets.sessionEquivalentWindowPairIdentities.isEmpty
                 else {
                     try? FileManager.default.removeItem(at: fileURL)
@@ -329,6 +329,21 @@ struct PlanUtilizationHistoryStore: Sendable {
                     return (accountKey, sorted)
                 }),
             sessionEquivalentWindowPairIdentities: providerHistory.sessionEquivalentWindowPairIdentities)
+    }
+
+    /// C3: an account that stops appearing in the snapshot store (removed, credentials gone)
+    /// otherwise keeps a history bucket here forever. Drop a bucket once its newest sample
+    /// across all series is older than 30 days, so gone accounts don't accumulate indefinitely.
+    private static let staleAccountBucketMaxAge: TimeInterval = 30 * 24 * 60 * 60
+
+    private static func pruningStaleAccounts(
+        _ accounts: [String: [PlanUtilizationSeriesHistory]],
+        now: Date = Date()) -> [String: [PlanUtilizationSeriesHistory]]
+    {
+        accounts.filter { _, histories in
+            guard let newest = histories.compactMap(\.latestCapturedAt).max() else { return false }
+            return now.timeIntervalSince(newest) <= Self.staleAccountBucketMaxAge
+        }
     }
 
     private static func sortedAccounts(
