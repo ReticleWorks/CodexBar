@@ -283,7 +283,8 @@ struct TokenAccountCLIContext {
             storeLoader: storeLoader,
             activeSource: activeSource ?? self.providerConfig(for: .codex)?.codexActiveSource ?? .liveSystem,
             baseEnvironment: self.baseEnvironment,
-            profileHomePaths: self.providerConfig(for: .codex)?.codexProfileHomePaths ?? [],
+            profileHomePaths: CodexHomeScope.discoveredHomePaths(
+                configured: self.providerConfig(for: .codex)?.codexProfileHomePaths),
             managedEnvironmentBuilder: { environment, account in
                 CodexHomeScope.scopedEnvironment(base: environment, codexHome: account.managedHomePath)
             })
@@ -310,10 +311,9 @@ struct TokenAccountCLIContext {
             return accounts?.account(id: id)?.managedHomePath
         case let .profileHome(path):
             guard let normalizedPath = CodexHomeScope.normalizedHomePath(path) else { return nil }
-            let configuredPaths = self.providerConfig(for: .codex)?.codexProfileHomePaths ?? []
-            return configuredPaths.contains {
-                CodexHomeScope.normalizedHomePath($0) == normalizedPath
-            } ? normalizedPath : nil
+            let configuredPaths = CodexHomeScope.discoveredHomePaths(
+                configured: self.providerConfig(for: .codex)?.codexProfileHomePaths)
+            return configuredPaths.contains(normalizedPath) ? normalizedPath : nil
         }
     }
 }

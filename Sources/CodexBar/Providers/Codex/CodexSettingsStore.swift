@@ -19,13 +19,7 @@ extension SettingsStore {
     }
 
     private static func normalizedCodexProfileHomePaths(_ paths: [String]?) -> [String] {
-        var seen: Set<String> = []
-        var result: [String] = []
-        for path in (paths ?? []).compactMap({ CodexHomeScope.normalizedHomePath($0) }) {
-            guard seen.insert(path).inserted else { continue }
-            result.append(path)
-        }
-        return result
+        CodexHomeScope.discoveredHomePaths(configured: paths)
     }
 
     private func loadManagedCodexAccounts() throws -> ManagedCodexAccountSet {

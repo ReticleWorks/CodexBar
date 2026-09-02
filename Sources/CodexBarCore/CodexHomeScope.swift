@@ -40,4 +40,38 @@ public enum CodexHomeScope {
         env["CODEX_HOME"] = codexHome
         return env
     }
+
+    /// Normalizes and dedupes `configured`, then appends any direct child of the home
+    /// directory named `.codex` or `.codex-*` that holds an `auth.json` and isn't already
+    /// configured. Discovery is non-recursive (home directory only). Configured paths keep
+    /// their original order; discovered paths are appended sorted.
+    public static func discoveredHomePaths(
+        configured: [String]?,
+        fileManager: FileManager = .default)
+        -> [String]
+    {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for path in (configured ?? []).compactMap({ normalizedHomePath($0, fileManager: fileManager) }) {
+            guard seen.insert(path).inserted else { continue }
+            result.append(path)
+        }
+
+        let home = fileManager.homeDirectoryForCurrentUser
+        let childNames = (try? fileManager.contentsOfDirectory(atPath: home.path)) ?? []
+        var discovered: [String] = []
+        for name in childNames {
+            guard name == ".codex" || name.hasPrefix(".codex-") else { continue }
+            let candidate = home.appendingPathComponent(name, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue,
+                  fileManager.fileExists(atPath: candidate.appendingPathComponent("auth.json").path),
+                  let normalized = normalizedHomePath(candidate.path, fileManager: fileManager),
+                  seen.insert(normalized).inserted
+            else { continue }
+            discovered.append(normalized)
+        }
+        return result + discovered.sorted()
+    }
 }
