@@ -432,6 +432,10 @@ final class UsageStore {
     @ObservationIgnored var lastPermissionPromptNotificationAt: [ProviderInstanceID: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [ProviderInstanceID: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [ProviderInstanceID: String] = [:]
+    // Remembers the Codex token-cost scope signature already confirmed to have no local session
+    // history, so the expensive scan is not re-run every refresh cycle for that scope. Cleared as
+    // soon as the scope signature changes (see `codexScopedHistoryConfirmedEmpty(for:scopeSignature:homePath:)`).
+    @ObservationIgnored var codexNoLocalHistoryScopeSignatures: [ProviderInstanceID: String] = [:]
     @ObservationIgnored var lastSpendDashboardTokenFetchAt: [ProviderInstanceID: Date] = [:]
     @ObservationIgnored var lastSpendDashboardTokenFetchScope: [ProviderInstanceID: String] = [:]
     var spendDashboardTokenRefreshInFlight: Set<ProviderInstanceID> = []
@@ -1486,6 +1490,21 @@ extension UsageStore {
         }
         let costScope = self.tokenCostScope(for: provider)
         let costScopeSignature = self.tokenSnapshotScopeSignature(for: provider)
+        // Provider-specific by design: only Codex's account-scoped homes (.profileHome /
+        // .managedAccount) ever set codexHomePath. When that scoped home has no local session
+        // history at all, skip the expensive scan and its recurring historyUnavailable failure —
+        // report the no-data state directly and stop re-scanning until the scope changes.
+        if provider == .codex, let codexHomePath = costScope.codexHomePath,
+           self.codexScopedHistoryConfirmedEmpty(
+               for: provider, scopeSignature: costScopeSignature, homePath: codexHomePath)
+        {
+            self.lastTokenFetchAt[provider.instanceID] = now
+            self.lastTokenFetchScope[provider.instanceID] = costScopeSignature
+            self.publishConfirmedEmptyTokenSnapshot(for: provider)
+            self.tokenErrors[provider.instanceID] = Self.tokenCostNoDataMessage(for: provider)
+            self.tokenFailureGates[provider.instanceID]?.recordSuccess()
+            return
+        }
         let publicationRevision = self.providerPublicationRevision(for: provider)
         let providerConfigRevision = self.settings.providerConfigRevision(for: provider)
         if !force, self.tokenRefreshCanReuseCurrentSnapshot(

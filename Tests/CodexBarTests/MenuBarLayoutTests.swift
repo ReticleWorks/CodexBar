@@ -820,7 +820,7 @@ struct MenuBarLayoutTests {
             updatedAt: Date())
 
         #expect(MenuBarLayoutToken.lanePercent(lane: .primary)
-            .editorLabel(provider: .amp, snapshot: snapshot) == "Other usage %")
+            .editorLabel(provider: .amp, snapshot: snapshot) == "Agent usage %")
         #expect(MenuBarLayoutToken.lanePercent(lane: .secondary)
             .editorLabel(provider: .amp, snapshot: snapshot) == "Orb usage %")
     }

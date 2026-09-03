@@ -109,7 +109,7 @@ struct MenuBarLayoutRendererTests {
             icon: nil,
             options: self.options())
 
-        #expect(output.accessibilityLabel == "Other usage 10%, Orb usage 9%")
+        #expect(output.accessibilityLabel == "Agent usage 10%, Orb usage 9%")
     }
 
     @Test

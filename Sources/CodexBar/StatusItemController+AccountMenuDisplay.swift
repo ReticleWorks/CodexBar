@@ -129,7 +129,10 @@ extension StatusItemController {
             return
         }
         guard self.codexAccountMenuProjectionRevalidationTask == nil else {
-            log.warning("codex menu revalidation skipped: already in flight")
+            // The in-flight pass was started for the previous active source, so it cannot answer
+            // this request. Remember it and re-run once that pass finishes.
+            self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight = true
+            log.warning("codex menu revalidation deferred: already in flight")
             return
         }
         log.warning("codex menu revalidation scheduled")
@@ -151,14 +154,15 @@ extension StatusItemController {
                     refreshOpenMenus: !self.openMenus.isEmpty,
                     deferOpenParentMenuRebuild: true,
                     allowStaleContentDuringDataRefresh: true)
-            case .discarded:
-                // The active source (or reconciliation generation) changed while this load was in
-                // flight, e.g. an account switch landed during a menu-open revalidation. The
-                // "already in flight" guard above dropped that switch's own request, so the current
-                // source's projection is still stale — retry now that the task handle is clear.
-                self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
-            case .skipped, .unchanged:
+            case .discarded, .skipped, .unchanged:
                 break
+            }
+
+            // A request that arrived mid-flight was answered by a pass started for the previous
+            // active source, whatever that pass returned. Re-run it now for the current source.
+            if self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight {
+                self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight = false
+                self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
             }
         }
     }

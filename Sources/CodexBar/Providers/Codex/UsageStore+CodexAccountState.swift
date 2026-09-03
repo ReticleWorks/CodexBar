@@ -71,6 +71,14 @@ extension UsageStore {
         }
 
         self.persistWidgetSnapshot(reason: "codex-account-refresh")
+        CodexBarLog.logger(LogCategories.providers).warning(
+            """
+            codex account-scoped refresh finished: \
+            published=\(self.snapshots[.codex] != nil) \
+            email=\(self.snapshots[.codex]?.accountEmail(for: .codex) ?? "nil") \
+            error=\(self.errors[.codex] ?? "nil") \
+            rows=\(self.codexAccountSnapshots.count)
+            """)
         phaseDidChange?(.completed)
     }
 
@@ -128,6 +136,8 @@ extension UsageStore {
     }
 
     func clearCodexPublishedUsageState(preserveSessionQuotaTransitionState: Bool = false) {
+        CodexBarLog.logger(LogCategories.providers).warning(
+            "codex published usage cleared (had=\(self.snapshots[.codex] != nil))")
         self.snapshots.removeValue(forKey: .codex)
         self.errors[.codex] = nil
         self.lastSourceLabels.removeValue(forKey: .codex)

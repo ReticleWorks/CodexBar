@@ -690,7 +690,7 @@ struct UsageStoreSessionQuotaTransitionTests {
         store.handleQuotaWarningTransitions(provider: .amp, snapshot: snapshot(used: 40))
         store.handleQuotaWarningTransitions(provider: .amp, snapshot: snapshot(used: 55))
 
-        #expect(notifier.quotaWarningPosts.map(\.event.windowDisplayLabel) == ["Other usage", "Orb usage"])
+        #expect(notifier.quotaWarningPosts.map(\.event.windowDisplayLabel) == ["Agent usage", "Orb usage"])
     }
 
     @Test
