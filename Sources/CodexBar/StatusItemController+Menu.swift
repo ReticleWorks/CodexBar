@@ -1098,6 +1098,9 @@ extension StatusItemController {
         if self.store.prepareCodexAccountScopedRefreshIfNeeded(), let menu {
             self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
         }
+        // That preparation clears the published Codex usage, and the refetch below can take many
+        // seconds. Show this account's already-cached row now instead of "Not fetched yet".
+        self.store.activateCachedCodexAccountSnapshot(for: account)
         let store = self.store
         let settings = self.settings
         Task { @MainActor [weak controller = self, weak menu, store, settings] in
