@@ -264,7 +264,10 @@ struct ClaudeProviderRuntimeTests {
         #expect(account.id == ProviderAccountIdentity(source: "claude-swap", opaqueID: "1"))
         #expect(account.snapshot?.primary?.usedPercent == 100)
         #expect(account.snapshot?.secondary?.usedPercent == 100)
-        #expect(account.snapshot?.updatedAt == now)
+        // A re-derived at-limit snapshot carries the time it was re-derived, not the retained
+        // snapshot's original stamp. Freezing it here is what made the menu show a stale
+        // "last updated" for an account sitting at its limit.
+        #expect((account.snapshot?.updatedAt ?? .distantPast) >= now)
         let error = try #require(account.error)
         #expect(error.contains("Session limit reached"))
         #expect(error.contains("Weekly limit reached"))
