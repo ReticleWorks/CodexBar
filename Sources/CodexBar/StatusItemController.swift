@@ -176,6 +176,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var openMenuRebuildRequests = MenuRebuildRequestRegistry<ObjectIdentifier>()
     var menuIdentitySignatures: [ObjectIdentifier: String] = [:]
     var codexAccountMenuProjectionRevalidationTask: Task<Void, Never>?
+    /// Set when a revalidation request arrives while one is already in flight. The in-flight pass
+    /// was started for the previous active source, so its result cannot answer the newer request.
+    var codexAccountMenuProjectionRevalidationRequestedWhileInFlight = false
     var selectedClaudeSwapDisplayAccountID: ProviderAccountIdentity?
     var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
     var parentMenuRebuildPendingAfterHostedSubviewClose = false

@@ -199,7 +199,7 @@ struct AmpUsageParserTests {
         #expect(usage.primary?.windowMinutes == ProviderPaceCapability.monthlyWindowSentinelMinutes)
         #expect(usage.secondary?.resetsAt == now.addingTimeInterval(29 * 24 * 60 * 60))
         #expect(usage.identity?.loginMethod == "Megawatt")
-        #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Other usage")
+        #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Agent usage")
         #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == "Orb usage")
     }
 

@@ -1090,9 +1090,17 @@ extension StatusItemController {
         let visibleAccountID = account.id
         self.advanceMenuInteraction(for: menu)
         self.settings.selectDisplayedCodexVisibleAccount(account)
+        // codexActiveSource's setter already clears the cached menu projection, but nothing forces
+        // an async recompute afterward. Without this call the switcher would keep rendering nil
+        // (no cached projection for the new source) until the next unrelated menu-open event
+        // happened to trigger one — showing the refresh complete with no data.
+        self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
         if self.store.prepareCodexAccountScopedRefreshIfNeeded(), let menu {
             self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
         }
+        // That preparation clears the published Codex usage, and the refetch below can take many
+        // seconds. Show this account's already-cached row now instead of "Not fetched yet".
+        self.store.activateCachedCodexAccountSnapshot(for: account)
         let store = self.store
         let settings = self.settings
         Task { @MainActor [weak controller = self, weak menu, store, settings] in

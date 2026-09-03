@@ -118,14 +118,29 @@ extension StatusItemController {
     }
 
     func scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for providers: [UsageProvider]) {
-        guard Self.codexAccountMenuProjectionRevalidationEnabled else { return }
+        let log = CodexBarLog.logger(LogCategories.providers)
+        guard Self.codexAccountMenuProjectionRevalidationEnabled else {
+            log.warning("codex menu revalidation skipped: disabled")
+            return
+        }
         guard providers.contains(.codex) else { return }
-        guard self.settings.codexAccountMenuProjectionNeedsRevalidation else { return }
-        guard self.codexAccountMenuProjectionRevalidationTask == nil else { return }
+        guard self.settings.codexAccountMenuProjectionNeedsRevalidation else {
+            log.warning("codex menu revalidation skipped: not needed")
+            return
+        }
+        guard self.codexAccountMenuProjectionRevalidationTask == nil else {
+            // The in-flight pass was started for the previous active source, so it cannot answer
+            // this request. Remember it and re-run once that pass finishes.
+            self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight = true
+            log.warning("codex menu revalidation deferred: already in flight")
+            return
+        }
+        log.warning("codex menu revalidation scheduled")
 
         self.codexAccountMenuProjectionRevalidationTask = Task { @MainActor [weak self] in
             guard let settings = self?.settings else { return }
             let result = await settings.revalidateCodexAccountMenuProjection()
+            log.warning("codex menu revalidation result=\(String(describing: result))")
             guard let self else { return }
             guard !Task.isCancelled else {
                 self.codexAccountMenuProjectionRevalidationTask = nil
@@ -141,6 +156,13 @@ extension StatusItemController {
                     allowStaleContentDuringDataRefresh: true)
             case .discarded, .skipped, .unchanged:
                 break
+            }
+
+            // A request that arrived mid-flight was answered by a pass started for the previous
+            // active source, whatever that pass returned. Re-run it now for the current source.
+            if self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight {
+                self.codexAccountMenuProjectionRevalidationRequestedWhileInFlight = false
+                self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
             }
         }
     }

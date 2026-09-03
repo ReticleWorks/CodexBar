@@ -68,6 +68,25 @@ extension UsageStore {
         }
     }
 
+    /// Publishes a newly selected Codex account's already-cached row immediately, the way
+    /// `activateCachedTokenAccountSnapshot` does for token-account providers. Selection clears the
+    /// published Codex usage before refetching, and that refetch can take many seconds, so without
+    /// this the card renders "Not fetched yet" for the whole fetch even though the row is in hand.
+    func activateCachedCodexAccountSnapshot(for account: CodexVisibleAccount) {
+        guard let cached = self.codexAccountSnapshots.first(where: {
+            $0.id == account.id && Self.codexPriorSnapshotAccountMatches($0.account, account: account)
+        }), let snapshot = cached.snapshot
+        else {
+            return
+        }
+        self.snapshots[.codex] = snapshot
+        self.lastKnownResetSnapshots[.codex] = snapshot
+        self.errors[.codex] = cached.error
+        if let sourceLabel = cached.sourceLabel {
+            self.lastSourceLabels[.codex] = sourceLabel
+        }
+    }
+
     func cacheTokenAccountSnapshot(
         provider: UsageProvider,
         account: ProviderTokenAccount,
@@ -217,6 +236,12 @@ extension UsageStore {
             activeVisibleAccountID: projection.activeVisibleAccountID)
         guard accounts.count > 1 else {
             if refreshInput.authority.isComplete {
+                CodexBarLog.logger(LogCategories.providers).warning(
+                    """
+                    codex account rows cleared: a complete discovery pass saw \
+                    \(accounts.count) visible account(s), dropping \
+                    \(self.codexAccountSnapshots.count) cached row(s)
+                    """)
                 self.codexAccountSnapshots = []
             }
             return

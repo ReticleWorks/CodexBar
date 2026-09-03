@@ -410,7 +410,7 @@ struct DashboardSnapshotBuilderTests {
         let windows = try #require(provider["windows"] as? [[String: Any]])
 
         #expect(windows.map { $0["kind"] as? String } == ["other", "orb"])
-        #expect(windows.map { $0["label"] as? String } == ["Other usage", "Orb usage"])
+        #expect(windows.map { $0["label"] as? String } == ["Agent usage", "Orb usage"])
     }
 
     @Test

@@ -38,7 +38,7 @@ struct CLIUnificationGoldenTests {
         Weekly quota: 86% left [==========--]
         ---
         == amp ==
-        Other usage: 85% left [==========--]
+        Agent usage: 85% left [==========--]
         Orb usage: 84% left [==========--]
         ---
         == kilo ==
@@ -167,7 +167,7 @@ struct CLIUnificationGoldenTests {
         ╭────────────────────────────────────────╮
         │ Amp [fixture]                          │
         │ ────────────────────────────────────── │
-        │ Other usage                   85% left │
+        │ Agent usage                   85% left │
         │ [ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━       ] │
         │                                        │
         │ Orb usage                     84% left │

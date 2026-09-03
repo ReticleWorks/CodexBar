@@ -692,6 +692,7 @@ extension UsageStore {
            let codexExpectedGuard = context.codexExpectedGuard,
            !self.shouldApplyCodexUsageResult(expectedGuard: codexExpectedGuard, usage: rawScoped)
         {
+            self.logCodexUsageResultDropped(expectedGuard: codexExpectedGuard, usage: rawScoped)
             self.retireCodexStateIfRefreshOwnerChanged(
                 expectedGuard: codexExpectedGuard,
                 generation: context.generation)
@@ -720,6 +721,7 @@ extension UsageStore {
                let codexExpectedGuard = context.codexExpectedGuard,
                !self.shouldApplyCodexUsageResult(expectedGuard: codexExpectedGuard, usage: rawScoped)
             {
+                self.logCodexUsageResultDropped(expectedGuard: codexExpectedGuard, usage: rawScoped)
                 self.retireCodexStateIfRefreshOwnerChanged(
                     expectedGuard: codexExpectedGuard,
                     generation: context.generation)

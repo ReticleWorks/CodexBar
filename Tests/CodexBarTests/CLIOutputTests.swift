@@ -257,7 +257,7 @@ struct CLIOutputTests {
                 resetStyle: .countdown),
             now: now)
 
-        #expect(text.contains("Other usage:"))
+        #expect(text.contains("Agent usage:"))
         #expect(text.contains("Orb usage:"))
         #expect(!text.contains("Amp Free:"))
         #expect(!text.contains("Balance:"))

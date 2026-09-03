@@ -26,6 +26,14 @@ extension SettingsStore {
         return discovered + extraHomes.filter { seen.insert($0).inserted }
     }
 
+    /// `codexProfileHomePaths` is a synchronous, `@MainActor` computed property read repeatedly per
+    /// reconciliation pass and from menu-rendering-adjacent code, which must stay side-effect free.
+    /// The mirror's actual disk I/O (reading every live home's `auth.json`, writing per-account
+    /// copies) is therefore run at most once per `mirrorRefreshInterval`; every call inside that
+    /// window returns the cached extra-homes list with no I/O.
+    private static let mirrorRefreshInterval: TimeInterval = 60
+    private static var cachedMirrorExtraHomes: (loadedAt: Date, extraHomes: [String])?
+
     /// Mirrors each live home's `auth.json` into a per-account backup (see
     /// `CodexCredentialMirror`) and returns any mirror directories that should stand in as extra
     /// profile homes because no live home currently holds that account. Live homes always win.
@@ -41,13 +49,20 @@ extension SettingsStore {
         #else
         guard !Self.isRunningTests else { return [] }
         #endif
+        if let cached = Self.cachedMirrorExtraHomes,
+           Date().timeIntervalSince(cached.loadedAt) < Self.mirrorRefreshInterval
+        {
+            return cached.extraHomes
+        }
         let fileManager = FileManager.default
         let liveHomes = liveHomePaths.map { URL(fileURLWithPath: $0, isDirectory: true) }
         let mirrorRoot = Self.codexCredentialMirrorRoot(fileManager: fileManager)
         let plan = CodexCredentialMirror.mirrorPlan(
             liveHomes: liveHomes, mirrorRoot: mirrorRoot, fileManager: fileManager)
         CodexCredentialMirror.apply(copies: plan.copies, fileManager: fileManager)
-        return plan.extraHomes.map(\.path)
+        let extraHomes = plan.extraHomes.map(\.path)
+        Self.cachedMirrorExtraHomes = (Date(), extraHomes)
+        return extraHomes
     }
 
     private static func codexCredentialMirrorRoot(fileManager: FileManager) -> URL {

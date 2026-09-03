@@ -331,6 +331,53 @@ extension UsageStore {
         return provider == .codex && self.codexCostCatchUpActivity?.phase == .indexing
     }
 
+    /// True once `scopeSignature` has been confirmed to have no local Codex session history at
+    /// `homePath`. Mirrors the `codexCostCatchUpScopeSignature` marker pattern in
+    /// `UsageStore+CodexCostCatchUp.swift`: the marker sticks until the scope signature no longer
+    /// matches, so switching to a scope that does have history re-checks immediately.
+    func codexScopedHistoryConfirmedEmpty(
+        for provider: UsageProvider,
+        scopeSignature: String,
+        homePath: String) -> Bool
+    {
+        if self.codexNoLocalHistoryScopeSignatures[provider.instanceID] == scopeSignature {
+            return true
+        }
+        guard !self.codexScopedHomeHasAnyLocalSessionHistory(homePath: homePath) else {
+            self.codexNoLocalHistoryScopeSignatures.removeValue(forKey: provider.instanceID)
+            return false
+        }
+        self.codexNoLocalHistoryScopeSignatures[provider.instanceID] = scopeSignature
+        return true
+    }
+
+    /// Cheap, bounded existence check for a Codex account-scoped home: true as soon as any file
+    /// turns up under `sessions` or the sibling `archived_sessions` directory. Never reads file
+    /// contents and stops at the first match instead of enumerating the whole tree.
+    func codexScopedHomeHasAnyLocalSessionHistory(homePath: String) -> Bool {
+        let sessionsRoot = URL(fileURLWithPath: homePath, isDirectory: true)
+            .appendingPathComponent("sessions", isDirectory: true)
+        if Self.directoryContainsAnyFile(sessionsRoot) { return true }
+        let archivedSessionsRoot = sessionsRoot
+            .deletingLastPathComponent()
+            .appendingPathComponent("archived_sessions", isDirectory: true)
+        return Self.directoryContainsAnyFile(archivedSessionsRoot)
+    }
+
+    private static func directoryContainsAnyFile(_ root: URL) -> Bool {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return false }
+        for case let item as URL in enumerator {
+            if (try? item.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true {
+                return true
+            }
+        }
+        return false
+    }
+
     func tokenCostScope(for provider: UsageProvider) -> (codexHomePath: String?, signature: String) {
         if provider == .vertexai {
             return (nil, "vertexai:allow-claude-fallback=\(!self.isEnabled(.claude))")
@@ -588,6 +635,15 @@ extension UsageStore {
         guard snapshot.daily.isEmpty, snapshot.meteredCostUSD == nil else { return false }
         if snapshot.historyCoverageIsEstablished { return true }
         guard self.retainsEstablishedTokenHistory(snapshot, for: provider) else {
+            // An account-scoped Codex home can hold a stale session file yet still carry no usable
+            // history in the window, which is not a fetch failure — that account simply has no local
+            // cost history. Record it against the scope so the scan is not repeated every cycle.
+            let scope = self.tokenCostScope(for: provider)
+            if provider == .codex, scope.codexHomePath != nil {
+                self.codexNoLocalHistoryScopeSignatures[provider.instanceID] =
+                    self.tokenSnapshotScopeSignature(for: provider)
+                return true
+            }
             throw TokenSnapshotError.historyUnavailable
         }
         return false

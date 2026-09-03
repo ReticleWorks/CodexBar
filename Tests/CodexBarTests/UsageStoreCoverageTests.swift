@@ -276,7 +276,7 @@ struct UsageStoreCoverageTests {
             return text
         }
 
-        #expect(model.metrics.map(\.title) == ["Other usage", "Orb usage", "Amp Free"])
+        #expect(model.metrics.map(\.title) == ["Agent usage", "Orb usage", "Amp Free"])
         #expect(model.planText == "Megawatt")
         #expect(menuLines.contains { $0.hasPrefix("Amp Free:") })
     }

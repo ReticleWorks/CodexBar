@@ -358,7 +358,11 @@ struct CodexBaselineCharacterizationTests {
         }
     }
 
-    @Test
+    /// This case is about a machine with no Codex CLI. An unusable `CODEX_CLI_PATH` does not create
+    /// that condition: the resolver falls through to a login-shell PATH the test environment cannot
+    /// suppress, so a developer machine with codex installed reports the CLI available and the case
+    /// cannot be constructed. State the precondition instead of failing on those machines.
+    @Test(.enabled(if: TTYCommandRunner.which("codex") == nil))
     func `CLI auto tries OAuth then CLI before surfacing an unreachable network`() async throws {
         let oauthHome = try self.makeUnavailableOAuthHome()
         defer { try? FileManager.default.removeItem(at: oauthHome) }

@@ -1222,6 +1222,97 @@ extension StatusMenuCodexSwitcherTests {
         #expect(store.snapshots[.codex]?.primary?.usedPercent == 77)
     }
 
+    @Test
+    func `codex menu projection revalidation retries after a discard caused by mid flight account switch`() async throws {
+        self.disableMenuCardsForTesting()
+        StatusItemController.setCodexAccountMenuProjectionRevalidationEnabledForTesting(true)
+        defer { StatusItemController.resetCodexAccountMenuProjectionRevalidationEnabledForTesting() }
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+        self.enableOnlyCodex(settings)
+
+        let accountAID = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-111111111111"))
+        let accountBID = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-222222222222"))
+        let accountA = ManagedCodexAccount(
+            id: accountAID,
+            email: "a@example.com",
+            managedHomePath: "/tmp/managed-a",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let accountB = ManagedCodexAccount(
+            id: accountBID,
+            email: "b@example.com",
+            managedHomePath: "/tmp/managed-b",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [accountA, accountB])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            settings._test_codexAccountSnapshotLoader = nil
+            try? FileManager.default.removeItem(at: storeURL)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: accountAID)
+
+        let visibleB = try #require(settings.codexVisibleAccountProjection.visibleAccounts
+            .first { $0.storedAccountID == accountBID })
+
+        func makeSnapshot(activeSource: CodexActiveSource) -> CodexAccountReconciliationSnapshot {
+            CodexAccountReconciliationSnapshot(
+                storedAccounts: [accountA, accountB],
+                activeStoredAccount: nil,
+                liveSystemAccount: nil,
+                matchingStoredAccountForLiveSystemAccount: nil,
+                activeSource: activeSource,
+                hasUnreadableAddedAccountStore: false)
+        }
+        let snapshotA = makeSnapshot(activeSource: .managedAccount(id: accountAID))
+        let snapshotB = makeSnapshot(activeSource: .managedAccount(id: accountBID))
+        let probeA = CodexAccountSnapshotLoaderProbe(snapshot: snapshotA, blocks: true)
+        let probeB = CodexAccountSnapshotLoaderProbe(snapshot: snapshotB)
+        settings._test_codexAccountSnapshotLoader = { source in
+            source == .managedAccount(id: accountAID) ? probeA.load() : probeB.load()
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+
+        // Menu-open schedules a revalidation for A; it blocks mid-flight.
+        controller.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
+        for _ in 0..<2000 where probeA.callCount == 0 {
+            await Task.yield()
+        }
+        try #require(probeA.callCount == 1)
+
+        // The user switches to B while A's revalidation is still in flight. The account-selection
+        // handler's own revalidation request is dropped by the "already in flight" guard.
+        settings.selectDisplayedCodexVisibleAccount(visibleB)
+        controller.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(for: [.codex])
+        #expect(probeB.callCount == 0)
+
+        // A's blocked load finally returns and is discarded (source/generation changed underneath
+        // it). Without a retry on discard, B's projection would never populate.
+        probeA.release()
+        for _ in 0..<200 where settings.codexVisibleAccountProjectionForMenuDisplay == nil {
+            await Task.yield()
+        }
+
+        #expect(settings.codexVisibleAccountProjectionForMenuDisplay?.activeVisibleAccountID == visibleB.id)
+        #expect(probeB.callCount == 1)
+    }
+
     private static func writeCodexAuthFile(
         homeURL: URL,
         email: String,
